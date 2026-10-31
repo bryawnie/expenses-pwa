@@ -21,7 +21,11 @@ export interface Snapshot {
 const API_TIMEOUT_MS = 60000;
 
 /** Llama al Apps Script. Devuelve el JSON de respuesta o lanza ApiError. */
-export async function api(settings: Settings, action: Op['action'] | 'bootstrap', payload: object = {}): Promise<Snapshot> {
+export async function api(
+  settings: Settings,
+  action: Op['action'] | 'bootstrap',
+  payload: object = {}
+): Promise<Snapshot> {
   if (!settings.url || !settings.token) {
     throw new ApiError('config', 'Falta configurar la conexión en Ajustes.');
   }

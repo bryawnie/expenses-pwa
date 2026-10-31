@@ -10,14 +10,19 @@
   }: { current: (number | null)[]; previous: (number | null)[]; monthKey: string; cutoff: number } = $props();
 
   /* Dimensiones (en unidades del viewBox del SVG). */
-  const W = 340, H = 190, L = 50, R = 44, T = 12, B = 24;
+  const W = 340,
+    H = 190,
+    L = 50,
+    R = 44,
+    T = 12,
+    B = 24;
 
   const days = $derived(Math.max(current.length, previous.length) - 1);
   const scale = $derived.by(() => {
     // El cero puede estar en medio si hay saldos negativos (más reintegros que gastos).
     const values = [...current, ...previous].filter((x): x is number => x != null);
     const maxPositive = Math.max(0, ...values);
-    const maxNegative = Math.max(0, ...values.map(v => -v));
+    const maxNegative = Math.max(0, ...values.map((v) => -v));
     const top = maxPositive > 0 ? niceMax(maxPositive * 1.04) : 0;
     const bottom = maxNegative > 0 ? niceMax(maxNegative * 1.04) : 0;
     return { top, bottom, span: top + bottom || 1 };
@@ -54,7 +59,13 @@
   }
 </script>
 
-<svg bind:this={svg} class="chart" viewBox="0 0 {W} {H}" role="img" aria-label="Gasto neto acumulado de {monthKey} comparado con el promedio de los meses anteriores">
+<svg
+  bind:this={svg}
+  class="chart"
+  viewBox="0 0 {W} {H}"
+  role="img"
+  aria-label="Gasto neto acumulado de {monthKey} comparado con el promedio de los meses anteriores"
+>
   {#each yTicks as t (t)}
     <line class="grid" x1={L} x2={W - R} y1={y(t)} y2={y(t)} style={t === 0 ? 'stroke:var(--ink3)' : undefined} />
     <text x={L - 6} y={y(t) + 3.5} text-anchor="end">{short(t)}</text>
@@ -63,19 +74,53 @@
     <text x={x(d)} y={H - 6} text-anchor="middle">{d}</text>
   {/each}
 
-  <path d={linePath(previous)} fill="none" stroke="var(--prev)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
-  <path d={linePath(current)} fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" />
+  <path
+    d={linePath(previous)}
+    fill="none"
+    stroke="var(--prev)"
+    stroke-width="2"
+    stroke-linejoin="round"
+    stroke-linecap="round"
+  />
+  <path
+    d={linePath(current)}
+    fill="none"
+    stroke="var(--accent)"
+    stroke-width="2.4"
+    stroke-linejoin="round"
+    stroke-linecap="round"
+  />
 
   {#if hasCurrent}
     <circle cx={x(cutoffDay)} cy={y(lastCurrent)} r="4" fill="var(--accent)" stroke="var(--card)" stroke-width="2" />
-    <text x={x(cutoffDay) + 7} y={y(lastCurrent) + 3.5} style="fill:var(--accent);font-weight:700">{monthShort(monthKey)}</text>
+    <text x={x(cutoffDay) + 7} y={y(lastCurrent) + 3.5} style="fill:var(--accent);font-weight:700"
+      >{monthShort(monthKey)}</text
+    >
   {/if}
   {#if lastPrevious != null}
     <text x={x(previous.length - 1) + 5} y={y(lastPrevious) + 3.5}>Prom.</text>
   {/if}
 
-  <line y1={T} y2={H - B} x1={hover ? x(hover.day) : 0} x2={hover ? x(hover.day) : 0} stroke="var(--ink3)" stroke-width="1" visibility={hover ? 'visible' : 'hidden'} />
-  <rect role="presentation" x={L} y={T} width={W - L - R} height={H - T - B} fill="transparent" onpointermove={show} onpointerdown={show} onpointerleave={() => (hover = null)} />
+  <line
+    y1={T}
+    y2={H - B}
+    x1={hover ? x(hover.day) : 0}
+    x2={hover ? x(hover.day) : 0}
+    stroke="var(--ink3)"
+    stroke-width="1"
+    visibility={hover ? 'visible' : 'hidden'}
+  />
+  <rect
+    role="presentation"
+    x={L}
+    y={T}
+    width={W - L - R}
+    height={H - T - B}
+    fill="transparent"
+    onpointermove={show}
+    onpointerdown={show}
+    onpointerleave={() => (hover = null)}
+  />
 </svg>
 {#if hover}
   <div class="tip" style="left:{hover.left}px;top:28px">

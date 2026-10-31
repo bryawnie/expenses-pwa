@@ -6,5 +6,9 @@
 <div class="monthnav">
   <button aria-label="Mes anterior" onclick={() => (app.month = monthShift(app.month, -1))}>◀</button>
   <b>{monthLabel(app.month)}</b>
-  <button aria-label="Mes siguiente" disabled={app.month >= currentMonth()} onclick={() => (app.month = monthShift(app.month, 1))}>▶</button>
+  <button
+    aria-label="Mes siguiente"
+    disabled={app.month >= currentMonth()}
+    onclick={() => (app.month = monthShift(app.month, 1))}>▶</button
+  >
 </div>

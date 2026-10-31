@@ -24,13 +24,25 @@ describe('stats', () => {
 
 describe('viewRows', () => {
   it('aplica altas, ediciones y borrados pendientes', () => {
-    const item = { id: 'x', date: '2026-10-05', name: 'Pan', desc: '', amount: -1500, type: 'Comida', account: 'Débito' };
+    const item = {
+      id: 'x',
+      date: '2026-10-05',
+      name: 'Pan',
+      desc: '',
+      amount: -1500,
+      type: 'Comida',
+      account: 'Débito'
+    };
     const queue: Op[] = [
       { qid: '1', action: 'add', payload: { items: [item] } },
-      { qid: '2', action: 'delete', payload: { row: 2, orig: { d: '2026-10-02', n: 'Café', ds: '', a: -3000, t: 'Comida', c: 'Débito' } } }
+      {
+        qid: '2',
+        action: 'delete',
+        payload: { row: 2, orig: { d: '2026-10-02', n: 'Café', ds: '', a: -3000, t: 'Comida', c: 'Débito' } }
+      }
     ];
     const rows = viewRows(data, queue);
-    expect(rows.map(r => r.n)).toEqual(['Pan', 'Pago', 'Reintegro']);
+    expect(rows.map((r) => r.n)).toEqual(['Pan', 'Pago', 'Reintegro']);
     expect(rows[0].pending).toBe(true);
   });
 });

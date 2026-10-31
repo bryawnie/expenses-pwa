@@ -12,14 +12,18 @@
   let accounts = $state<Record<string, { kind: AccountKind; closeDay: string; dueDay: string }>>({});
   let budgets = $state<Record<string, string>>({});
 
-  const types = $derived(app.data.types.filter(t => !isTransfer(t)));
+  const types = $derived(app.data.types.filter((t) => !isTransfer(t)));
 
   // Se rellena cuando llegan cuentas/categorías nuevas sin pisar lo que ya se está editando.
   $effect(() => {
     for (const a of app.data.accounts) {
       if (accounts[a]) continue;
       const c = accountConfig(app.data.config, a);
-      accounts[a] = { kind: c.kind, closeDay: c.closeDay ? String(c.closeDay) : '', dueDay: c.dueDay ? String(c.dueDay) : '' };
+      accounts[a] = {
+        kind: c.kind,
+        closeDay: c.closeDay ? String(c.closeDay) : '',
+        dueDay: c.dueDay ? String(c.dueDay) : ''
+      };
     }
     for (const t of app.data.types) {
       if (budgets[t] !== undefined) continue;
@@ -29,7 +33,8 @@
   });
 
   const message = $derived(
-    connMsg || (app.err ? '⚠ ' + app.err : app.data.loaded ? `Conectado · ${app.data.rows.length} movimientos cargados.` : '')
+    connMsg ||
+      (app.err ? '⚠ ' + app.err : app.data.loaded ? `Conectado · ${app.data.rows.length} movimientos cargados.` : '')
   );
   const lastSyncText = $derived(
     app.lastSync ? new Date(app.lastSync).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : '—'
@@ -52,7 +57,11 @@
     for (const [name, a] of Object.entries(accounts)) {
       if (!app.data.accounts.includes(name)) continue;
       const credit = a.kind === 'credito';
-      config.accounts[name] = { kind: a.kind, closeDay: credit ? day(a.closeDay) : 0, dueDay: credit ? day(a.dueDay) : 0 };
+      config.accounts[name] = {
+        kind: a.kind,
+        closeDay: credit ? day(a.closeDay) : 0,
+        dueDay: credit ? day(a.dueDay) : 0
+      };
     }
     config.budgets = {};
     for (const [type, v] of Object.entries(budgets)) {
@@ -74,10 +83,18 @@
 
 <div class="card">
   <h2>Conexión con tu planilla</h2>
-  <label class="f">URL de la aplicación web (Apps Script)
-    <input bind:value={url} placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" autocapitalize="off" spellcheck="false" />
+  <label class="f"
+    >URL de la aplicación web (Apps Script)
+    <input
+      bind:value={url}
+      placeholder="https://script.google.com/macros/s/…/exec"
+      autocomplete="off"
+      autocapitalize="off"
+      spellcheck="false"
+    />
   </label>
-  <label class="f">Token
+  <label class="f"
+    >Token
     <input type="password" bind:value={token} autocomplete="off" autocapitalize="off" spellcheck="false" />
   </label>
   <button class="primary" style="margin-top:8px" onclick={saveConnection}>Guardar y probar conexión</button>
@@ -97,8 +114,14 @@
         </select>
         {#if accounts[name].kind === 'credito'}
           <div class="sub">
-            Cierre día <input class="day" inputmode="numeric" aria-label="Día de cierre" bind:value={accounts[name].closeDay} />
-            Vence día <input class="day" inputmode="numeric" aria-label="Día de vencimiento" bind:value={accounts[name].dueDay} />
+            Cierre día <input
+              class="day"
+              inputmode="numeric"
+              aria-label="Día de cierre"
+              bind:value={accounts[name].closeDay}
+            />
+            Vence día
+            <input class="day" inputmode="numeric" aria-label="Día de vencimiento" bind:value={accounts[name].dueDay} />
           </div>
         {/if}
       </div>
@@ -119,7 +142,9 @@
         placeholder="Sin límite"
         aria-label="Presupuesto {type}"
         value={budgets[type] ?? ''}
-        oninput={e => { budgets[type] = e.currentTarget.value = formatDigits(e.currentTarget.value); }}
+        oninput={(e) => {
+          budgets[type] = e.currentTarget.value = formatDigits(e.currentTarget.value);
+        }}
       />
     </div>
   {:else}
@@ -133,13 +158,21 @@
   <div class="line2"><span>Cambios pendientes</span><b>{app.queue.length}</b></div>
   <div class="line2"><span>Última sincronización</span><b>{lastSyncText}</b></div>
   <div style="display:flex;gap:8px;margin-top:8px">
-    <button class="ghost" onclick={() => { app.status = 'ok'; void app.sync(); }}>Sincronizar ahora</button>
+    <button
+      class="ghost"
+      onclick={() => {
+        app.status = 'ok';
+        void app.sync();
+      }}>Sincronizar ahora</button
+    >
     {#if app.queue.length}<button class="ghost" onclick={discard}>Descartar pendientes</button>{/if}
   </div>
 </div>
 
 <div class="card">
   <h2>Este dispositivo</h2>
-  <div class="muted small">Tus datos viven en tu planilla de Google. Aquí solo se guarda una copia para usar la app sin conexión.</div>
+  <div class="muted small">
+    Tus datos viven en tu planilla de Google. Aquí solo se guarda una copia para usar la app sin conexión.
+  </div>
   <button class="ghost" style="margin-top:10px" onclick={clearLocal}>Borrar copia local</button>
 </div>

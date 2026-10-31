@@ -23,7 +23,11 @@
   });
   const nRef = $derived(refCumulatives.length);
   const refLabel = $derived(
-    nRef >= 6 ? 'los 6 meses anteriores' : nRef === 1 ? 'el mes anterior con datos' : `los ${nRef} meses anteriores con datos`
+    nRef >= 6
+      ? 'los 6 meses anteriores'
+      : nRef === 1
+        ? 'el mes anterior con datos'
+        : `los ${nRef} meses anteriores con datos`
   );
 
   const averageSeries = $derived.by(() => {
@@ -45,18 +49,26 @@
 
   // Gasto neto de los últimos 6 meses terminando en el mes elegido.
   const months = $derived(
-    [5, 4, 3, 2, 1, 0].map(i => {
+    [5, 4, 3, 2, 1, 0].map((i) => {
       const key = monthShift(app.month, -i);
       const ms = stats(key, rows);
       return { key, v: ms.gasto - ms.ingreso };
     })
   );
 
-  const spendCategories = $derived(Object.keys(st.byCat).filter(c => st.byCat[c] > 0).sort((a, b) => st.byCat[b] - st.byCat[a]));
-  const incomeCategories = $derived(Object.keys(st.byCat).filter(c => st.byCat[c] < 0).sort((a, b) => st.byCat[a] - st.byCat[b]));
+  const spendCategories = $derived(
+    Object.keys(st.byCat)
+      .filter((c) => st.byCat[c] > 0)
+      .sort((a, b) => st.byCat[b] - st.byCat[a])
+  );
+  const incomeCategories = $derived(
+    Object.keys(st.byCat)
+      .filter((c) => st.byCat[c] < 0)
+      .sort((a, b) => st.byCat[a] - st.byCat[b])
+  );
   const totalNet = $derived(spendCategories.reduce((sum, c) => sum + st.byCat[c], 0));
   const accounts = $derived(Object.keys(st.byAcct).sort((a, b) => Math.abs(st.byAcct[b]) - Math.abs(st.byAcct[a])));
-  const sampleDays = $derived([1, 5, 10, 15, 20, 25, 30].filter(d => d <= st.days));
+  const sampleDays = $derived([1, 5, 10, 15, 20, 25, 30].filter((d) => d <= st.days));
 
   function goCategory(category: string) {
     app.filter.cat = category;
@@ -68,7 +80,9 @@
 <MonthNav />
 
 {#if !st.n && !nRef}
-  <div class="card empty">{app.data.loaded ? 'No hay movimientos en este mes.' : 'Conecta tu planilla en Ajustes para ver el resumen.'}</div>
+  <div class="card empty">
+    {app.data.loaded ? 'No hay movimientos en este mes.' : 'Conecta tu planilla en Ajustes para ver el resumen.'}
+  </div>
 {:else}
   <div class="card">
     <div class="muted small">Gasto neto de {monthName(app.month).toLowerCase()}</div>
@@ -77,12 +91,15 @@
     <div class="kpis">
       <div><small>Gastos</small><b>{money(st.gasto)}</b></div>
       <div><small>Reintegros</small><b>{money(st.ingreso)}</b></div>
-      {#if budgetTotal}<div><small>Presupuesto usado</small><b>{Math.round((budgetUsed / budgetTotal) * 100)}%</b></div>{/if}
+      {#if budgetTotal}<div>
+          <small>Presupuesto usado</small><b>{Math.round((budgetUsed / budgetTotal) * 100)}%</b>
+        </div>{/if}
     </div>
     {#if showDelta}
       <div style="margin-top:8px">
         <div class="delta {diff > 0 ? 'bad' : 'good'}">
-          {diff > 0 ? '▲' : '▼'} Gasto neto {money(Math.abs(diff))} {diff > 0 ? 'sobre' : 'bajo'} el promedio de {refLabel}{isCurrentMonth ? ' a esta fecha' : ''}
+          {diff > 0 ? '▲' : '▼'} Gasto neto {money(Math.abs(diff))}
+          {diff > 0 ? 'sobre' : 'bajo'} el promedio de {refLabel}{isCurrentMonth ? ' a esta fecha' : ''}
         </div>
       </div>
     {/if}
@@ -95,7 +112,11 @@
     </div>
     <div class="legend">
       <span><i style="background:var(--accent)"></i>{monthName(app.month)}</span>
-      {#if nRef}<span><i style="background:var(--prev)"></i>Promedio {nRef >= 6 ? 'de 6 meses' : `de ${nRef} ${nRef === 1 ? 'mes' : 'meses'}`}</span>{/if}
+      {#if nRef}<span
+          ><i style="background:var(--prev)"></i>Promedio {nRef >= 6
+            ? 'de 6 meses'
+            : `de ${nRef} ${nRef === 1 ? 'mes' : 'meses'}`}</span
+        >{/if}
     </div>
     <details class="tbl">
       <summary>Ver tabla</summary>
@@ -103,7 +124,11 @@
         <tbody>
           <tr><th>Día</th><th>{monthShort(app.month)}</th><th>Promedio</th></tr>
           {#each sampleDays as d (d)}
-            <tr><td>{d}</td><td>{currentSeries[d] != null ? money(currentSeries[d]!) : '—'}</td><td>{averageSeries[d] != null ? money(averageSeries[d]!) : '—'}</td></tr>
+            <tr
+              ><td>{d}</td><td>{currentSeries[d] != null ? money(currentSeries[d]!) : '—'}</td><td
+                >{averageSeries[d] != null ? money(averageSeries[d]!) : '—'}</td
+              ></tr
+            >
           {/each}
         </tbody>
       </table>
@@ -115,13 +140,19 @@
     <BarChart items={months} selectedKey={app.month} />
     <details class="tbl">
       <summary>Ver tabla</summary>
-      <table class="t"><tbody>{#each months as m (m.key)}<tr><td>{monthLabel(m.key)}</td><td>{money(m.v)}</td></tr>{/each}</tbody></table>
+      <table class="t">
+        <tbody
+          >{#each months as m (m.key)}<tr><td>{monthLabel(m.key)}</td><td>{money(m.v)}</td></tr>{/each}</tbody
+        >
+      </table>
     </details>
   </div>
 
   <div class="card">
     <h2>Gasto neto por categoría</h2>
-    <div class="muted small" style="margin:-4px 0 6px">Descuenta los reintegros que registres en la misma categoría.</div>
+    <div class="muted small" style="margin:-4px 0 6px">
+      Descuenta los reintegros que registres en la misma categoría.
+    </div>
     {#each spendCategories as c (c)}
       {@const value = st.byCat[c]}
       {@const budget = budgets[c] || 0}
@@ -141,7 +172,9 @@
       <div class="empty">Sin gastos.</div>
     {/each}
     {#if !budgetTotal}
-      <div class="muted small" style="margin-top:8px">Define presupuestos por categoría en Ajustes para ver cuánto te queda.</div>
+      <div class="muted small" style="margin-top:8px">
+        Define presupuestos por categoría en Ajustes para ver cuánto te queda.
+      </div>
     {/if}
   </div>
 

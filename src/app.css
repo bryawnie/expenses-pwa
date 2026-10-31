@@ -22,7 +22,7 @@
   --r: 14px;
 }
 @media (prefers-color-scheme: dark) {
-  :root:where(:not([data-theme="light"])) {
+  :root:where(:not([data-theme='light'])) {
     color-scheme: dark;
     --bg: #121211;
     --card: #1a1a19;
@@ -57,7 +57,7 @@ body {
   font:
     16px/1.4 system-ui,
     -apple-system,
-    "Segoe UI",
+    'Segoe UI',
     Roboto,
     sans-serif;
 }
@@ -115,16 +115,16 @@ header#top h1 {
   border-radius: 50%;
   background: var(--good);
 }
-#syncBtn[data-s="pending"] #syncDot {
+#syncBtn[data-s='pending'] #syncDot {
   background: var(--warn);
 }
-#syncBtn[data-s="offline"] #syncDot {
+#syncBtn[data-s='offline'] #syncDot {
   background: var(--ink3);
 }
-#syncBtn[data-s="error"] #syncDot {
+#syncBtn[data-s='error'] #syncDot {
   background: var(--bad);
 }
-#syncBtn[data-s="busy"] #syncDot {
+#syncBtn[data-s='busy'] #syncDot {
   background: var(--accent);
   animation: pulse 1s infinite;
 }
@@ -386,7 +386,7 @@ label.f select,
   font-weight: 700;
 }
 @media (prefers-color-scheme: dark) {
-  :root:where(:not([data-theme="light"])) .ico {
+  :root:where(:not([data-theme='light'])) .ico {
     background: hsl(var(--h, 200) 30% 22%);
     color: hsl(var(--h, 200) 60% 80%);
   }

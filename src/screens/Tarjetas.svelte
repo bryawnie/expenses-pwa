@@ -6,7 +6,7 @@
   const cards = $derived(creditCards(app.data));
   const name = $derived(cards.includes(app.card.name) ? app.card.name : (cards[0] ?? ''));
   const config = $derived(accountConfig(app.data.config, name));
-  const rows = $derived(viewRows(app.data, app.queue).filter(r => r.c === name));
+  const rows = $derived(viewRows(app.data, app.queue).filter((r) => r.c === name));
   const period = $derived(periodFor(app.data.config, name, app.card.p));
   const totals = $derived(periodTotals(rows, period));
 
@@ -55,7 +55,8 @@
 
 {#if !cards.length}
   <div class="card empty">
-    No hay tarjetas de crédito marcadas.<br />Ve a <b>Ajustes → Cuentas</b>, elige “Crédito” para tus tarjetas e indica su día de cierre.<br /><br />
+    No hay tarjetas de crédito marcadas.<br />Ve a <b>Ajustes → Cuentas</b>, elige “Crédito” para tus tarjetas e indica
+    su día de cierre.<br /><br />
     <button class="ghost" onclick={() => (app.tab = 'ajustes')}>Ir a Ajustes</button>
   </div>
 {:else}
@@ -66,7 +67,9 @@
   </div>
 
   {#if !config.closeDay}
-    <div class="banner">Indica el día de cierre de {name} en <b>Ajustes → Cuentas</b> para cuadrar el estado de cuenta.</div>
+    <div class="banner">
+      Indica el día de cierre de {name} en <b>Ajustes → Cuentas</b> para cuadrar el estado de cuenta.
+    </div>
   {:else}
     <div class="card">
       <div class="monthnav">
@@ -75,9 +78,15 @@
           {period.open ? 'Período abierto' : 'Cierre ' + dayMonth(period.end)}
           <div class="muted small" style="font-weight:400">{dayMonth(period.start)} – {dayMonth(period.end)}</div>
         </b>
-        <button aria-label="Período siguiente" disabled={app.card.p <= 0} onclick={() => (app.card = { name, p: app.card.p - 1 })}>▶</button>
+        <button
+          aria-label="Período siguiente"
+          disabled={app.card.p <= 0}
+          onclick={() => (app.card = { name, p: app.card.p - 1 })}>▶</button
+        >
       </div>
-      <div class="muted small" style="margin-top:10px">{period.open ? 'Uso desde el último cierre' : 'Facturado en este cierre'}</div>
+      <div class="muted small" style="margin-top:10px">
+        {period.open ? 'Uso desde el último cierre' : 'Facturado en este cierre'}
+      </div>
       <div class="hero">{money(totals.facturado)}</div>
       <div class="muted small">
         {period.open
@@ -87,11 +96,14 @@
       <div style="margin-top:12px">
         <div class="line2"><span>Compras y cargos</span><b>{money(totals.compras + totals.cargosTr)}</b></div>
         {#if totals.devol}<div class="line2"><span>Devoluciones</span><b>{money(-totals.devol)}</b></div>{/if}
-        {#if totals.pagos}<div class="line2"><span class="muted">Pagos abonados (no se restan)</span><b>{money(totals.pagos)}</b></div>{/if}
+        {#if totals.pagos}<div class="line2">
+            <span class="muted">Pagos abonados (no se restan)</span><b>{money(totals.pagos)}</b>
+          </div>{/if}
         {#if dueDate}<div class="line2"><span class="muted">Vence</span><b>{dayMonth(dueDate)}</b></div>{/if}
       </div>
       {#if !period.open}
-        <label class="f" style="margin-top:10px">Total del estado de cuenta
+        <label class="f" style="margin-top:10px"
+          >Total del estado de cuenta
           <input
             class="inp"
             inputmode="numeric"
@@ -123,7 +135,8 @@
         <div class="empty">Sin movimientos en este período.</div>
       {:else}
         <div class="muted small" style="margin-bottom:4px">
-          Marca cada cargo que veas en tu estado de cuenta. Marcado: <b>{money(markedTotal)}</b> · Sin marcar: <b>{money(totals.facturado - markedTotal)}</b>
+          Marca cada cargo que veas en tu estado de cuenta. Marcado: <b>{money(markedTotal)}</b> · Sin marcar:
+          <b>{money(totals.facturado - markedTotal)}</b>
         </div>
         {#each totals.periodRows as r, i (signatures[i])}
           <button class="chk" class:done={checked[signatures[i]]} onclick={() => tick(signatures[i])}>

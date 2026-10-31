@@ -1,7 +1,13 @@
 <script lang="ts">
   import { app } from '../lib/app.svelte';
 
-  const TITLES = { registrar: 'Registrar', movimientos: 'Movimientos', resumen: 'Resumen', tarjetas: 'Tarjetas', ajustes: 'Ajustes' };
+  const TITLES = {
+    registrar: 'Registrar',
+    movimientos: 'Movimientos',
+    resumen: 'Resumen',
+    tarjetas: 'Tarjetas',
+    ajustes: 'Ajustes'
+  };
 
   const view = $derived.by(() => {
     const pending = app.queue.length;

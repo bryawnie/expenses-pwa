@@ -10,7 +10,13 @@
   import Tarjetas from './screens/Tarjetas.svelte';
   import Ajustes from './screens/Ajustes.svelte';
 
-  const screens = { registrar: Registrar, movimientos: Movimientos, resumen: Resumen, tarjetas: Tarjetas, ajustes: Ajustes };
+  const screens = {
+    registrar: Registrar,
+    movimientos: Movimientos,
+    resumen: Resumen,
+    tarjetas: Tarjetas,
+    ajustes: Ajustes
+  };
   const Screen = $derived(screens[app.tab]);
   const names = $derived(frequentNames(app.data));
 
@@ -20,8 +26,13 @@
   void app.sync();
 
   $effect(() => {
-    const onOnline = () => { app.status = 'ok'; void app.sync(); };
-    const onOffline = () => { app.status = 'offline'; };
+    const onOnline = () => {
+      app.status = 'ok';
+      void app.sync();
+    };
+    const onOffline = () => {
+      app.status = 'offline';
+    };
     const onVisible = () => {
       if (!document.hidden && Date.now() - app.lastSync > 30000) void app.sync();
     };

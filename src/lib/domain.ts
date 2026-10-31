@@ -23,7 +23,16 @@ export function sameSignature(x: Original, o: Original): boolean {
 
 /** Convierte un ítem de la cola (nombres largos) a la forma corta de fila. */
 function itemToRow(item: Item, extra: Partial<Row>): Row {
-  return { r: null, d: item.date, n: item.name, ds: item.desc, a: item.amount, t: item.type, c: item.account, ...extra };
+  return {
+    r: null,
+    d: item.date,
+    n: item.name,
+    ds: item.desc,
+    a: item.amount,
+    t: item.type,
+    c: item.account,
+    ...extra
+  };
 }
 
 /** Datos de una fila tal como estaban en la planilla; el servidor los usa para verificar que no cambió. */
@@ -34,16 +43,16 @@ export const originalOf = (r: Row): Original => ({ d: r.d, n: r.n, ds: r.ds, a: 
  * pendientes ya aplicadas encima (altas, ediciones y borrados), más nuevas primero.
  */
 export function viewRows(data: Data, queue: Op[]): Row[] {
-  const rows: Row[] = data.rows.map(r => ({ r: r[0], d: r[1], n: r[2], ds: r[3], a: r[4], t: r[5], c: r[6] }));
+  const rows: Row[] = data.rows.map((r) => ({ r: r[0], d: r[1], n: r[2], ds: r[3], a: r[4], t: r[5], c: r[6] }));
 
   for (const op of queue) {
     if (op.action === 'add') {
       for (const item of op.payload.items) rows.push(itemToRow(item, { r: null, id: item.id, pending: true }));
     } else if (op.action === 'update') {
-      const i = rows.findIndex(x => !x.pending && sameSignature(x, op.payload.orig));
+      const i = rows.findIndex((x) => !x.pending && sameSignature(x, op.payload.orig));
       if (i >= 0) rows[i] = itemToRow(op.payload.item, { r: rows[i].r, pending: true, upd: true });
     } else if (op.action === 'delete') {
-      const i = rows.findIndex(x => !x.pending && sameSignature(x, op.payload.orig));
+      const i = rows.findIndex((x) => !x.pending && sameSignature(x, op.payload.orig));
       if (i >= 0) rows.splice(i, 1);
     }
   }
@@ -70,7 +79,8 @@ export function guessKind(name: string): AccountConfig['kind'] {
 export const accountConfig = (config: Config, name: string): AccountConfig =>
   config.accounts[name] || { kind: guessKind(name), closeDay: 0, dueDay: 0 };
 
-export const creditCards = (data: Data) => data.accounts.filter(a => accountConfig(data.config, a).kind === 'credito');
+export const creditCards = (data: Data) =>
+  data.accounts.filter((a) => accountConfig(data.config, a).kind === 'credito');
 
 export function defaultTransferDesc(config: Config, toAccount: string): string {
   return accountConfig(config, toAccount).kind === 'credito' ? 'Pago ' + toAccount : 'Traspaso a ' + toAccount;
@@ -81,7 +91,7 @@ export function defaultTransferDesc(config: Config, toAccount: string): string {
  * Los montos "netos" restan los reintegros a los gastos de la misma categoría/cuenta.
  */
 export function stats(monthKey: string, rows: Row[]): Stats {
-  const monthRows = rows.filter(r => r.d.startsWith(monthKey) && !isTransfer(r.t));
+  const monthRows = rows.filter((r) => r.d.startsWith(monthKey) && !isTransfer(r.t));
   const [y, m] = monthKey.split('-').map(Number);
   const days = daysInMonth(y, m);
 
@@ -159,7 +169,7 @@ export function periodFor(config: Config, card: string, offset: number): Period 
 /** Movimientos de una tarjeta dentro de un período y sus totales. */
 export function periodTotals(rows: Row[], period: Period) {
   const periodRows = rows
-    .filter(r => r.d >= period.start && r.d <= period.end)
+    .filter((r) => r.d >= period.start && r.d <= period.end)
     .sort((a, b) => (a.d < b.d ? -1 : a.d > b.d ? 1 : 0));
 
   let compras = 0; // compras normales

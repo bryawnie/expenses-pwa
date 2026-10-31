@@ -12,11 +12,11 @@
 
   /** Aplica mes, cuenta, categoría y búsqueda. */
   const rows = $derived.by(() => {
-    let list = viewRows(app.data, app.queue).filter(r => r.d.startsWith(app.month));
-    if (app.filter.acct) list = list.filter(r => r.c === app.filter.acct);
-    if (app.filter.cat) list = list.filter(r => r.t === app.filter.cat);
+    let list = viewRows(app.data, app.queue).filter((r) => r.d.startsWith(app.month));
+    if (app.filter.acct) list = list.filter((r) => r.c === app.filter.acct);
+    if (app.filter.cat) list = list.filter((r) => r.t === app.filter.cat);
     const query = norm(app.filter.q);
-    if (query) list = list.filter(r => norm(`${r.n} ${r.ds} ${r.t} ${r.c}`).includes(query));
+    if (query) list = list.filter((r) => norm(`${r.n} ${r.ds} ${r.t} ${r.c}`).includes(query));
     return list;
   });
   const st = $derived(stats(app.month, rows));
@@ -28,10 +28,10 @@
     return Object.keys(byDay)
       .sort()
       .reverse()
-      .map(day => ({
+      .map((day) => ({
         day,
         rows: byDay[day],
-        total: byDay[day].filter(r => r.a < 0 && !isTransfer(r.t)).reduce((sum, r) => sum - r.a, 0)
+        total: byDay[day].filter((r) => r.a < 0 && !isTransfer(r.t)).reduce((sum, r) => sum - r.a, 0)
       }));
   });
 
@@ -45,7 +45,14 @@
 </script>
 
 <MonthNav />
-<input class="inp" id="q" type="search" placeholder="Buscar comercio, descripción…" aria-label="Buscar" bind:value={app.filter.q} />
+<input
+  class="inp"
+  id="q"
+  type="search"
+  placeholder="Buscar comercio, descripción…"
+  aria-label="Buscar"
+  bind:value={app.filter.q}
+/>
 <div class="scroller" id="acctFilter">
   <button class="pill" class:on={!app.filter.acct} onclick={() => (app.filter.acct = '')}>Todas</button>
   {#each app.data.accounts as a (a)}
@@ -57,7 +64,9 @@
 {/if}
 <div class="card">
   {#if !rows.length}
-    <div class="empty">{app.data.loaded ? 'No hay movimientos con estos filtros.' : 'Aún no hay datos. Conecta tu planilla en Ajustes.'}</div>
+    <div class="empty">
+      {app.data.loaded ? 'No hay movimientos con estos filtros.' : 'Aún no hay datos. Conecta tu planilla en Ajustes.'}
+    </div>
   {:else}
     <div class="line2"><span class="muted">Gastos</span><b>{money(st.gasto)}</b></div>
     {#if st.ingreso}<div class="line2"><span class="muted">Ingresos</span><b>{money(st.ingreso)}</b></div>{/if}

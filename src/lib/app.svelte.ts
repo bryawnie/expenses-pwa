@@ -61,7 +61,7 @@ class App {
   /** Agrega una operación a la cola e intenta sincronizar de inmediato. */
   enqueue(op: NewOp) {
     // Solo importa la última configuración: descarta las anteriores sin enviar.
-    if (op.action === 'saveConfig') this.queue = this.queue.filter(o => o.action !== 'saveConfig');
+    if (op.action === 'saveConfig') this.queue = this.queue.filter((o) => o.action !== 'saveConfig');
     this.queue.push({ qid: uid(), ...op } as Op);
     void this.sync();
   }
@@ -77,28 +77,28 @@ class App {
   }
 
   clearLocal() {
-    ['data', 'queue', 'checks', 'last'].forEach(k => storage.remove(k));
+    ['data', 'queue', 'checks', 'last'].forEach((k) => storage.remove(k));
     location.reload();
   }
 
   /** Corrige un alta que aún está en la cola (no llegó a la planilla). */
   replacePendingItem(item: Item) {
     for (const op of this.queue) {
-      if (op.action === 'add') op.payload.items = op.payload.items.map(it => (it.id === item.id ? item : it));
+      if (op.action === 'add') op.payload.items = op.payload.items.map((it) => (it.id === item.id ? item : it));
     }
   }
 
   /** Quita un alta que aún está en la cola; descarta la operación si queda vacía. */
   removePendingItem(id: string) {
     for (const op of this.queue) {
-      if (op.action === 'add') op.payload.items = op.payload.items.filter(it => it.id !== id);
+      if (op.action === 'add') op.payload.items = op.payload.items.filter((it) => it.id !== id);
     }
-    this.queue = this.queue.filter(op => op.action !== 'add' || op.payload.items.length > 0);
+    this.queue = this.queue.filter((op) => op.action !== 'add' || op.payload.items.length > 0);
   }
 
   private applySnapshot(json: Snapshot) {
     // Si hay una config sin enviar, la local manda sobre la del servidor.
-    const keepLocalConfig = this.queue.some(op => op.action === 'saveConfig');
+    const keepLocalConfig = this.queue.some((op) => op.action === 'saveConfig');
     this.data = {
       rows: json.rows,
       types: json.types,

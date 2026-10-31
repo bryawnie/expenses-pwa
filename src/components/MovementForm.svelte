@@ -20,8 +20,8 @@
     ...(isEdit ? [] : [['traspaso', 'Traspaso'] as [FormKind, string]])
   ]);
   // Al registrar no se ofrece el tipo "traspaso" (para eso está el botón Traspaso del formulario).
-  const types = $derived(isEdit ? app.data.types : app.data.types.filter(t => !isTransfer(t)));
-  const destinations = $derived(app.data.accounts.filter(a => a !== form.acct));
+  const types = $derived(isEdit ? app.data.types : app.data.types.filter((t) => !isTransfer(t)));
+  const destinations = $derived(app.data.accounts.filter((a) => a !== form.acct));
   const descPlaceholder = $derived(
     isTransferForm ? (form.to ? defaultTransferDesc(app.data.config, form.to) : 'Ej: Pago tarjeta') : ''
   );
@@ -72,17 +72,41 @@
   </div>
   <div class="amt-in">
     <span>$</span>
-    <input id="f-amount" inputmode="numeric" autocomplete="off" placeholder="0" aria-label="Monto" value={formatDigits(form.amount)} oninput={onAmount} />
+    <input
+      id="f-amount"
+      inputmode="numeric"
+      autocomplete="off"
+      placeholder="0"
+      aria-label="Monto"
+      value={formatDigits(form.amount)}
+      oninput={onAmount}
+    />
   </div>
   {#if !isTransferForm}
     <div>
-      <label class="f">Comercio o nombre
-        <input id="f-name" list="names" autocomplete="off" autocapitalize="sentences" bind:value={form.name} onchange={suggestFromName} />
+      <label class="f"
+        >Comercio o nombre
+        <input
+          id="f-name"
+          list="names"
+          autocomplete="off"
+          autocapitalize="sentences"
+          bind:value={form.name}
+          onchange={suggestFromName}
+        />
       </label>
     </div>
   {/if}
-  <label class="f"><span>Descripción</span>
-    <input id="f-desc" autocomplete="off" autocapitalize="sentences" placeholder={descPlaceholder} bind:value={form.desc} oninput={() => (form.descTouched = true)} />
+  <label class="f"
+    ><span>Descripción</span>
+    <input
+      id="f-desc"
+      autocomplete="off"
+      autocapitalize="sentences"
+      placeholder={descPlaceholder}
+      bind:value={form.desc}
+      oninput={() => (form.descTouched = true)}
+    />
   </label>
   <div class="row">
     <label class="f">Fecha<input type="date" id="f-date" bind:value={form.date} /></label>
@@ -93,8 +117,16 @@
   </div>
   {#if !isTransferForm}
     <div>
-      <label class="f">Tipo
-        <select id="f-type" value={types.includes(form.type) ? form.type : ''} onchange={e => { form.type = e.currentTarget.value; form.typeTouched = true; }}>
+      <label class="f"
+        >Tipo
+        <select
+          id="f-type"
+          value={types.includes(form.type) ? form.type : ''}
+          onchange={(e) => {
+            form.type = e.currentTarget.value;
+            form.typeTouched = true;
+          }}
+        >
           <option value="">Elige un tipo…</option>
           {#each types as t (t)}<option value={t}>{t}</option>{/each}
         </select>

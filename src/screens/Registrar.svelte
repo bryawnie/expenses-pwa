@@ -7,7 +7,11 @@
   import CategoryIcon from '../components/CategoryIcon.svelte';
   import MovementForm from '../components/MovementForm.svelte';
 
-  const recent = $derived(viewRows(app.data, app.queue).filter(r => !isTransfer(r.t)).slice(0, 4));
+  const recent = $derived(
+    viewRows(app.data, app.queue)
+      .filter((r) => !isTransfer(r.t))
+      .slice(0, 4)
+  );
 
   /** Valida el formulario y encola el alta. Devuelve un mensaje de error, o '' si todo salió bien. */
   function submit(): string {
