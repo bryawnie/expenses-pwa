@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { hue, splitEmoji } from '../lib/utils';
+  import { hueFromText, splitLeadingEmoji } from '../lib/utils';
 
   let { type }: { type: string } = $props();
-  const parts = $derived(splitEmoji(type));
+  const label = $derived(splitLeadingEmoji(type));
 </script>
 
-<span class="ico" style="--h:{hue(parts.txt)}">{parts.e || (parts.txt[0] || '·').toUpperCase()}</span>
+<span class="ico" style="--h:{hueFromText(label.text)}">{label.emoji || (label.text[0] || '·').toUpperCase()}</span>

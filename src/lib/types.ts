@@ -1,22 +1,20 @@
-/** Fila cruda tal como la envía el servidor: [fila, fecha, nombre, descripción, monto, tipo, cuenta]. */
-export type RawRow = [number, string, string, string, number, string, string];
+/** [sheetRow, date, name, description, amount, type, account], as sent by the server. */
+export type SheetRow = [number, string, string, string, number, string, string];
 
-/** Fila de movimiento que ve el usuario (la planilla + operaciones pendientes aplicadas). */
-export interface Row {
-  r: number | null; // nº de fila en la planilla (null = aún no existe)
-  d: string; // fecha 'YYYY-MM-DD'
-  n: string; // nombre/comercio
-  ds: string; // descripción
-  a: number; // monto (negativo = gasto)
-  t: string; // tipo/categoría
-  c: string; // cuenta
+export interface Transaction {
+  sheetRow: number | null;
+  date: string;
+  name: string;
+  description: string;
+  amount: number;
+  type: string;
+  account: string;
   id?: string;
-  pending?: boolean;
-  upd?: boolean;
+  isPending?: boolean;
 }
 
-/** Movimiento en la cola de envío (nombres largos, es lo que entiende el servidor). */
-export interface Item {
+/** Transaction as the server expects it inside queued operations (wire format, do not rename). */
+export interface TransactionItem {
   id: string;
   date: string;
   name: string;
@@ -26,19 +24,33 @@ export interface Item {
   account: string;
 }
 
-export type Original = Pick<Row, 'd' | 'n' | 'ds' | 'a' | 't' | 'c'>;
+/** Wire format used by the server to find the sheet row an operation refers to. */
+export interface OriginalRowPayload {
+  d: string;
+  n: string;
+  ds: string;
+  a: number;
+  t: string;
+  c: string;
+}
 
-export type Op =
-  | { qid: string; action: 'add'; payload: { items: Item[] } }
-  | { qid: string; action: 'update'; payload: { row: number | null; orig: Original; item: Item } }
-  | { qid: string; action: 'delete'; payload: { row: number | null; orig: Original } }
-  | { qid: string; action: 'saveConfig'; payload: { config: Config } };
-
-export type NewOp =
-  | { action: 'add'; payload: { items: Item[] } }
-  | { action: 'update'; payload: { row: number | null; orig: Original; item: Item } }
-  | { action: 'delete'; payload: { row: number | null; orig: Original } }
+export type OperationInput =
+  | { action: 'add'; payload: { items: TransactionItem[] } }
+  | {
+      action: 'update';
+      payload: {
+        row: number | null;
+        orig: OriginalRowPayload;
+        item: TransactionItem;
+      };
+    }
+  | {
+      action: 'delete';
+      payload: { row: number | null; orig: OriginalRowPayload };
+    }
   | { action: 'saveConfig'; payload: { config: Config } };
+
+export type QueuedOperation = OperationInput & { queueId: string };
 
 export type AccountKind = 'debito' | 'credito' | 'efectivo';
 
@@ -55,45 +67,56 @@ export interface Config {
   settings: Record<string, unknown>;
 }
 
-export interface Data {
-  rows: RawRow[];
+export interface SheetData {
+  rows: SheetRow[];
   types: string[];
   accounts: string[];
   config: Config;
   loaded: boolean;
 }
 
-export interface Settings {
+export interface ConnectionSettings {
   url: string;
   token: string;
 }
 
-export type Tab = 'registrar' | 'movimientos' | 'resumen' | 'tarjetas' | 'ajustes';
-export type SyncState = 'ok' | 'offline' | 'error';
+export type Tab = 'register' | 'transactions' | 'summary' | 'cards' | 'settings';
+export type SyncStatus = 'ok' | 'offline' | 'error';
 
-export type FormKind = 'gasto' | 'ingreso' | 'traspaso';
+export type TransactionKind = 'expense' | 'income' | 'transfer';
 
-/** Borrador del formulario. Los flags *Touched evitan que el autocompletado pise lo que el usuario ya eligió. */
-export interface Form {
-  kind: FormKind;
-  amount: string; // solo dígitos
+/** Form state. The `has*` flags stop autocomplete from overwriting what the user already chose. */
+export interface TransactionDraft {
+  kind: TransactionKind;
+  amountDigits: string;
   name: string;
-  desc: string;
+  description: string;
   date: string;
   type: string;
-  acct: string;
-  to: string; // cuenta destino (solo traspasos)
-  typeTouched: boolean;
-  acctTouched: boolean;
-  descTouched: boolean;
+  account: string;
+  destinationAccount: string;
+  hasChosenType: boolean;
+  hasChosenAccount: boolean;
+  hasEditedDescription: boolean;
 }
 
-export interface Stats {
-  gasto: number;
-  ingreso: number;
-  byCat: Record<string, number>;
-  byAcct: Record<string, number>;
-  daily: number[];
-  days: number;
-  n: number;
+export interface MonthStats {
+  expenses: number;
+  income: number;
+  netByCategory: Record<string, number>;
+  netByAccount: Record<string, number>;
+  dailyNet: number[];
+  daysInMonth: number;
+  transactionCount: number;
+}
+
+export interface MovementFilter {
+  account: string;
+  category: string;
+  query: string;
+}
+
+export interface SelectedCard {
+  name: string;
+  periodOffset: number;
 }

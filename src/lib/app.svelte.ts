@@ -1,151 +1,173 @@
-/* Estado global de la app y sincronización con la planilla (cola offline). */
-import { ApiError, api, type Snapshot } from './api';
-import { emptyConfig, emptyData } from './domain';
+import { ApiError, callApi, type Snapshot } from './api';
+import { emptyConfig, emptySheetData } from './domain';
+import { emptyDraft } from './forms';
 import { storage } from './storage';
-import type { Config, Data, Form, Item, NewOp, Op, Settings, SyncState, Tab } from './types';
-import { currentMonth, uid } from './utils';
-import { newForm } from './forms';
+import type {
+  Config,
+  ConnectionSettings,
+  MovementFilter,
+  OperationInput,
+  QueuedOperation,
+  SelectedCard,
+  SheetData,
+  SyncStatus,
+  Tab,
+  TransactionDraft,
+  TransactionItem
+} from './types';
+import { currentMonthKey, generateId } from './utils';
+
+const TOAST_DURATION_MS = 2800;
+
+const isSaveConfig = (operation: QueuedOperation) => operation.action === 'saveConfig';
+
+const isAdditionWithoutItems = (operation: QueuedOperation) =>
+  operation.action === 'add' && operation.payload.items.length === 0;
 
 class App {
-  tab = $state<Tab>('registrar');
-  month = $state(currentMonth());
+  tab = $state<Tab>('register');
+  month = $state(currentMonthKey());
 
-  // Persistido en localStorage
-  settings = $state<Settings>(storage.get('settings', { url: '', token: '' }));
-  data = $state<Data>(storage.get('data', emptyData()));
-  queue = $state<Op[]>(storage.get('queue', []));
-  last = $state<{ acct: string }>(storage.get('last', { acct: '' })); // última cuenta usada
-  checks = $state<Record<string, Record<string, boolean>>>(storage.get('checks', {})); // cargos marcados al cuadrar tarjetas
+  // Saved in localStorage
+  settings = $state<ConnectionSettings>(storage.get('settings', { url: '', token: '' }));
+  data = $state<SheetData>(storage.get('data', emptySheetData()));
+  queue = $state<QueuedOperation[]>(storage.get('queue', []));
+  lastUsedAccount = $state(storage.get('last', { acct: '' }).acct);
+  checkedCharges = $state<Record<string, Record<string, boolean>>>(storage.get('checks', {}));
 
-  // Solo en memoria
-  syncing = $state(false);
-  status = $state<SyncState>('ok');
-  err = $state('');
-  lastSync = $state(0);
-  filter = $state({ acct: '', cat: '', q: '' }); // filtros de Movimientos
-  card = $state({ name: '', p: 0 }); // tarjeta y período elegidos (p: 0 = abierto, 1 = último cerrado…)
-  draft = $state<Form>(newForm(storage.get('last', { acct: '' }).acct)); // borrador de Registrar
+  // Memory only
+  isSyncing = $state(false);
+  syncStatus = $state<SyncStatus>('ok');
+  errorMessage = $state('');
+  lastSyncedAt = $state(0);
+  movementFilter = $state<MovementFilter>({ account: '', category: '', query: '' });
+  selectedCard = $state<SelectedCard>({ name: '', periodOffset: 0 });
+  draft = $state<TransactionDraft>(emptyDraft(storage.get('last', { acct: '' }).acct));
   toastMessage = $state('');
-  private toastTimer: ReturnType<typeof setTimeout> | undefined;
+  private toastTimeoutId: ReturnType<typeof setTimeout> | undefined;
 
-  /** Persiste cada parte del estado cuando cambia. Llamar una vez dentro de un `$effect.root`. */
-  persist() {
+  /** Call once inside an effect root: saves each part of the state whenever it changes. */
+  persistOnChange() {
     $effect(() => storage.set('settings', $state.snapshot(this.settings)));
     $effect(() => storage.set('data', $state.snapshot(this.data)));
     $effect(() => storage.set('queue', $state.snapshot(this.queue)));
-    $effect(() => storage.set('last', $state.snapshot(this.last)));
-    $effect(() => storage.set('checks', $state.snapshot(this.checks)));
+    $effect(() => storage.set('last', { acct: this.lastUsedAccount }));
+    $effect(() => storage.set('checks', $state.snapshot(this.checkedCharges)));
   }
 
-  /** Importa URL y token desde el hash (#u=…&t=…) para configurar un dispositivo nuevo con un enlace. */
-  importHash() {
+  /** A link ending in #u=<url>&t=<token> configures a new device without typing. */
+  importConnectionFromHash() {
     const params = new URLSearchParams(location.hash.replace(/^#/, ''));
     const url = params.get('u');
     const token = params.get('t');
     if (!url || !token) return;
     this.settings = { url, token };
     history.replaceState(null, '', location.pathname + location.search);
-    this.tab = 'registrar';
+    this.tab = 'register';
   }
 
-  toast(message: string) {
+  showToast(message: string) {
     this.toastMessage = message;
-    clearTimeout(this.toastTimer);
-    this.toastTimer = setTimeout(() => (this.toastMessage = ''), 2800);
+    clearTimeout(this.toastTimeoutId);
+    this.toastTimeoutId = setTimeout(() => (this.toastMessage = ''), TOAST_DURATION_MS);
   }
 
   resetDraft() {
-    this.draft = newForm(this.last.acct);
+    this.draft = emptyDraft(this.lastUsedAccount);
   }
 
-  /** Agrega una operación a la cola e intenta sincronizar de inmediato. */
-  enqueue(op: NewOp) {
-    // Solo importa la última configuración: descarta las anteriores sin enviar.
-    if (op.action === 'saveConfig') this.queue = this.queue.filter((o) => o.action !== 'saveConfig');
-    this.queue.push({ qid: uid(), ...op } as Op);
-    void this.sync();
+  enqueueOperation(operation: OperationInput) {
+    if (operation.action === 'saveConfig') {
+      this.queue = this.queue.filter((queued) => !isSaveConfig(queued)); // only the latest config matters
+    }
+    this.queue.push({ queueId: generateId(), ...operation });
+    void this.synchronize();
   }
 
-  /** Guarda la configuración localmente y la encola para la planilla. */
   saveConfig(config: Config) {
     this.data.config = config;
-    this.enqueue({ action: 'saveConfig', payload: { config } });
+    this.enqueueOperation({ action: 'saveConfig', payload: { config } });
   }
 
-  discardQueue() {
+  discardPendingOperations() {
     this.queue = [];
   }
 
-  clearLocal() {
-    ['data', 'queue', 'checks', 'last'].forEach((k) => storage.remove(k));
+  clearLocalCopy() {
+    ['data', 'queue', 'checks', 'last'].forEach((key) => storage.remove(key));
     location.reload();
   }
 
-  /** Corrige un alta que aún está en la cola (no llegó a la planilla). */
-  replacePendingItem(item: Item) {
-    for (const op of this.queue) {
-      if (op.action === 'add') op.payload.items = op.payload.items.map((it) => (it.id === item.id ? item : it));
+  replaceQueuedItem(item: TransactionItem) {
+    for (const operation of this.queue) {
+      if (operation.action === 'add') {
+        operation.payload.items = operation.payload.items.map((queued) => (queued.id === item.id ? item : queued));
+      }
     }
   }
 
-  /** Quita un alta que aún está en la cola; descarta la operación si queda vacía. */
-  removePendingItem(id: string) {
-    for (const op of this.queue) {
-      if (op.action === 'add') op.payload.items = op.payload.items.filter((it) => it.id !== id);
+  removeQueuedItem(itemId: string) {
+    for (const operation of this.queue) {
+      if (operation.action === 'add') {
+        operation.payload.items = operation.payload.items.filter((queued) => queued.id !== itemId);
+      }
     }
-    this.queue = this.queue.filter((op) => op.action !== 'add' || op.payload.items.length > 0);
+    this.queue = this.queue.filter((operation) => !isAdditionWithoutItems(operation));
   }
 
-  private applySnapshot(json: Snapshot) {
-    // Si hay una config sin enviar, la local manda sobre la del servidor.
-    const keepLocalConfig = this.queue.some((op) => op.action === 'saveConfig');
+  private applySnapshot(snapshot: Snapshot) {
+    const hasUnsentConfig = this.queue.some(isSaveConfig);
     this.data = {
-      rows: json.rows,
-      types: json.types,
-      accounts: json.accounts,
+      rows: snapshot.rows,
+      types: snapshot.types,
+      accounts: snapshot.accounts,
       loaded: true,
-      config: keepLocalConfig ? this.data.config : { ...emptyConfig(), ...json.config }
+      config: hasUnsentConfig ? this.data.config : { ...emptyConfig(), ...snapshot.config }
     };
   }
 
-  /** Envía la cola en orden y luego descarga una copia fresca de la planilla. */
-  async sync() {
-    if (this.syncing) return;
-    if (!this.settings.url) return;
+  /** Sends the queue in order, then downloads a fresh copy of the sheet. */
+  async synchronize() {
+    if (this.isSyncing || !this.settings.url) return;
 
-    this.syncing = true;
+    this.isSyncing = true;
     try {
       while (this.queue.length) {
-        const op = this.queue[0];
+        const operation = this.queue[0];
         try {
-          const json = await api($state.snapshot(this.settings), op.action, $state.snapshot(op.payload));
+          const snapshot = await callApi(
+            $state.snapshot(this.settings),
+            operation.action,
+            $state.snapshot(operation.payload)
+          );
           this.queue.shift();
-          this.applySnapshot(json);
-        } catch (e) {
-          // Los errores "definitivos" descartan la operación; el resto (red, auth…) aborta y se reintenta luego.
-          if (!(e instanceof ApiError) || (e.code !== 'conflict' && e.code !== 'bad_request')) throw e;
+          this.applySnapshot(snapshot);
+        } catch (error) {
+          // Rejected operations are dropped; network and auth errors abort and are retried later.
+          const isRejection = error instanceof ApiError && (error.code === 'conflict' || error.code === 'bad_request');
+          if (!isRejection) throw error;
           this.queue.shift();
-          this.toast(
-            e.code === 'conflict'
+          this.showToast(
+            error.code === 'conflict'
               ? 'Un cambio no se aplicó: la fila ya había cambiado en la planilla.'
-              : 'Un cambio fue rechazado: ' + e.message
+              : 'Un cambio fue rechazado: ' + error.message
           );
         }
       }
-      this.applySnapshot(await api($state.snapshot(this.settings), 'bootstrap'));
-      this.err = '';
-      this.lastSync = Date.now();
-      this.status = 'ok';
-    } catch (e) {
-      const error = e instanceof ApiError ? e : new ApiError('internal', (e as Error).message);
-      this.err = error.message;
-      this.status = error.code === 'network' ? 'offline' : 'error';
-      if (error.code === 'auth') {
-        this.tab = 'ajustes';
-        this.toast('Token inválido: revísalo en Ajustes.');
+      this.applySnapshot(await callApi($state.snapshot(this.settings), 'bootstrap'));
+      this.errorMessage = '';
+      this.lastSyncedAt = Date.now();
+      this.syncStatus = 'ok';
+    } catch (error) {
+      const apiError = error instanceof ApiError ? error : new ApiError('internal', (error as Error).message);
+      this.errorMessage = apiError.message;
+      this.syncStatus = apiError.code === 'network' ? 'offline' : 'error';
+      if (apiError.code === 'auth') {
+        this.tab = 'settings';
+        this.showToast('Token inválido: revísalo en Ajustes.');
       }
     } finally {
-      this.syncing = false;
+      this.isSyncing = false;
     }
   }
 }

@@ -1,37 +1,43 @@
 <script lang="ts">
   import { app } from '../lib/app.svelte';
 
-  const TITLES = {
-    registrar: 'Registrar',
-    movimientos: 'Movimientos',
-    resumen: 'Resumen',
-    tarjetas: 'Tarjetas',
-    ajustes: 'Ajustes'
+  const TAB_TITLES = {
+    register: 'Registrar',
+    transactions: 'Movimientos',
+    summary: 'Resumen',
+    cards: 'Tarjetas',
+    settings: 'Ajustes'
   };
 
-  const view = $derived.by(() => {
-    const pending = app.queue.length;
-    const pendingText = `${pending} pendiente${pending > 1 ? 's' : ''}`;
-    if (app.syncing) return { state: 'busy', text: 'Sincronizando…' };
-    if (pending && app.status !== 'error') {
-      return app.status === 'offline'
+  const syncIndicator = $derived.by(() => {
+    const pendingCount = app.queue.length;
+    const pendingText = `${pendingCount} pendiente${pendingCount > 1 ? 's' : ''}`;
+    if (app.isSyncing) return { state: 'busy', text: 'Sincronizando…' };
+    if (pendingCount && app.syncStatus !== 'error') {
+      return app.syncStatus === 'offline'
         ? { state: 'offline', text: `Sin conexión · ${pendingText}` }
         : { state: 'pending', text: pendingText };
     }
-    if (app.status === 'offline') return { state: 'offline', text: 'Sin conexión' };
-    if (app.status === 'error') return { state: 'error', text: 'Error · toca para reintentar' };
+    if (app.syncStatus === 'offline') return { state: 'offline', text: 'Sin conexión' };
+    if (app.syncStatus === 'error') return { state: 'error', text: 'Error · toca para reintentar' };
     return { state: 'ok', text: app.settings.url ? 'Sincronizado' : 'Sin configurar' };
   });
 
-  function syncNow() {
-    app.status = 'ok';
-    void app.sync();
+  function retrySync() {
+    app.syncStatus = 'ok';
+    void app.synchronize();
   }
 </script>
 
 <header id="top">
-  <h1 id="title">{TITLES[app.tab]}</h1>
-  <button id="syncBtn" data-s={view.state} aria-label="Sincronizar ahora" title={app.err} onclick={syncNow}>
-    <span id="syncDot"></span><span id="syncTxt">{view.text}</span>
+  <h1 id="title">{TAB_TITLES[app.tab]}</h1>
+  <button
+    id="syncBtn"
+    data-s={syncIndicator.state}
+    aria-label="Sincronizar ahora"
+    title={app.errorMessage}
+    onclick={retrySync}
+  >
+    <span id="syncDot"></span><span id="syncTxt">{syncIndicator.text}</span>
   </button>
 </header>

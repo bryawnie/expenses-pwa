@@ -1,191 +1,245 @@
-/* Lógica de dominio pura: filas visibles (planilla + pendientes), estadísticas y tarjetas. */
-import type { AccountConfig, Config, Data, Item, Op, Original, Row, Stats } from './types';
-import { addDays, daysInMonth, monthShift, norm, pad, today } from './utils';
+import type {
+  AccountConfig,
+  AccountKind,
+  Config,
+  MonthStats,
+  OriginalRowPayload,
+  QueuedOperation,
+  SheetData,
+  SheetRow,
+  Transaction,
+  TransactionItem
+} from './types';
+import { addDaysToDate, dayOfMonth, daysInMonth, isoDateInMonth, normalizeText, shiftMonth, todayIso } from './utils';
 
-/** ¿Es un traspaso entre cuentas propias? (no cuenta como gasto ni ingreso) */
-export const isTransfer = (type: string) => norm(type).includes('traspaso');
+const DEFAULT_TRANSFER_TYPE = 'Traspasos Internos';
+const PENDING_ROW_ORDER = 1e9;
+const MAX_AUTOCOMPLETE_NAMES = 300;
+
+export const isTransfer = (type: string) => normalizeText(type).includes('traspaso');
 
 export const emptyConfig = (): Config => ({ accounts: {}, budgets: {}, statements: {}, settings: {} });
 
-export const emptyData = (): Data => ({ rows: [], types: [], accounts: [], config: emptyConfig(), loaded: false });
+export const emptySheetData = (): SheetData => ({
+  rows: [],
+  types: [],
+  accounts: [],
+  config: emptyConfig(),
+  loaded: false
+});
 
-/** ¿Dos filas son "la misma"? Sirve para ubicar una fila aunque haya cambiado de número en la planilla. */
-export function sameSignature(x: Original, o: Original): boolean {
-  return (
-    x.d === o.d &&
-    norm(x.n) === norm(o.n) &&
-    norm(x.ds) === norm(o.ds) &&
-    Math.abs(x.a - o.a) < 0.005 &&
-    norm(x.t) === norm(o.t) &&
-    norm(x.c) === norm(o.c)
-  );
-}
+const transactionFromSheetRow = ([
+  sheetRow,
+  date,
+  name,
+  description,
+  amount,
+  type,
+  account
+]: SheetRow): Transaction => ({
+  sheetRow,
+  date,
+  name,
+  description,
+  amount,
+  type,
+  account
+});
 
-/** Convierte un ítem de la cola (nombres largos) a la forma corta de fila. */
-function itemToRow(item: Item, extra: Partial<Row>): Row {
+function transactionFromItem(item: TransactionItem, extra: Partial<Transaction>): Transaction {
   return {
-    r: null,
-    d: item.date,
-    n: item.name,
-    ds: item.desc,
-    a: item.amount,
-    t: item.type,
-    c: item.account,
+    sheetRow: null,
+    date: item.date,
+    name: item.name,
+    description: item.desc,
+    amount: item.amount,
+    type: item.type,
+    account: item.account,
     ...extra
   };
 }
 
-/** Datos de una fila tal como estaban en la planilla; el servidor los usa para verificar que no cambió. */
-export const originalOf = (r: Row): Original => ({ d: r.d, n: r.n, ds: r.ds, a: r.a, t: r.t, c: r.c });
+export const toOriginalRowPayload = (transaction: Transaction): OriginalRowPayload => ({
+  d: transaction.date,
+  n: transaction.name,
+  ds: transaction.description,
+  a: transaction.amount,
+  t: transaction.type,
+  c: transaction.account
+});
 
-/**
- * Todas las filas que ve el usuario: las de la planilla con las operaciones
- * pendientes ya aplicadas encima (altas, ediciones y borrados), más nuevas primero.
- */
-export function viewRows(data: Data, queue: Op[]): Row[] {
-  const rows: Row[] = data.rows.map((r) => ({ r: r[0], d: r[1], n: r[2], ds: r[3], a: r[4], t: r[5], c: r[6] }));
+/** Rows may move in the sheet, so a row is found by its content rather than by its number. */
+function matchesOriginal(transaction: Transaction, original: OriginalRowPayload): boolean {
+  return (
+    transaction.date === original.d &&
+    normalizeText(transaction.name) === normalizeText(original.n) &&
+    normalizeText(transaction.description) === normalizeText(original.ds) &&
+    Math.abs(transaction.amount - original.a) < 0.005 &&
+    normalizeText(transaction.type) === normalizeText(original.t) &&
+    normalizeText(transaction.account) === normalizeText(original.c)
+  );
+}
 
-  for (const op of queue) {
-    if (op.action === 'add') {
-      for (const item of op.payload.items) rows.push(itemToRow(item, { r: null, id: item.id, pending: true }));
-    } else if (op.action === 'update') {
-      const i = rows.findIndex((x) => !x.pending && sameSignature(x, op.payload.orig));
-      if (i >= 0) rows[i] = itemToRow(op.payload.item, { r: rows[i].r, pending: true, upd: true });
-    } else if (op.action === 'delete') {
-      const i = rows.findIndex((x) => !x.pending && sameSignature(x, op.payload.orig));
-      if (i >= 0) rows.splice(i, 1);
+/** Sheet rows with the queued operations applied on top, newest first. */
+export function buildVisibleTransactions(data: SheetData, queue: QueuedOperation[]): Transaction[] {
+  const transactions = data.rows.map(transactionFromSheetRow);
+  const isStoredInSheet = (transaction: Transaction) => !transaction.isPending;
+  const findSheetTransactionIndex = (original: OriginalRowPayload) =>
+    transactions.findIndex((transaction) => isStoredInSheet(transaction) && matchesOriginal(transaction, original));
+
+  for (const operation of queue) {
+    if (operation.action === 'add') {
+      for (const item of operation.payload.items) {
+        transactions.push(transactionFromItem(item, { id: item.id, isPending: true }));
+      }
+    } else if (operation.action === 'update') {
+      const index = findSheetTransactionIndex(operation.payload.orig);
+      if (index >= 0) {
+        transactions[index] = transactionFromItem(operation.payload.item, {
+          sheetRow: transactions[index].sheetRow,
+          isPending: true
+        });
+      }
+    } else if (operation.action === 'delete') {
+      const index = findSheetTransactionIndex(operation.payload.orig);
+      if (index >= 0) transactions.splice(index, 1);
     }
   }
 
-  const rowOrder = (row: Row) => (row.r == null ? 1e9 : row.r); // las pendientes (sin fila) van primero
-  rows.sort((a, b) => {
-    if (a.d !== b.d) return a.d < b.d ? 1 : -1;
-    return rowOrder(b) - rowOrder(a);
-  });
-  return rows;
+  return transactions.sort(compareNewestFirst);
 }
 
-export const transferType = (types: string[]) => types.find(isTransfer) || 'Traspasos Internos';
+function compareNewestFirst(a: Transaction, b: Transaction): number {
+  if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+  return rowOrder(b) - rowOrder(a);
+}
 
-/** Adivina si una cuenta es efectivo, crédito o débito según su nombre. */
-export function guessKind(name: string): AccountConfig['kind'] {
-  const n = norm(name);
-  if (/efectivo|cash/.test(n)) return 'efectivo';
-  if (/\b(tc|tdc)\b|credito|visa|master|amex|cmr|lider|falabella|ripley|cencosud|paris/.test(n)) return 'credito';
+const rowOrder = (transaction: Transaction) => transaction.sheetRow ?? PENDING_ROW_ORDER;
+
+function compareOldestFirst(a: Transaction, b: Transaction): number {
+  if (a.date === b.date) return 0;
+  return a.date < b.date ? -1 : 1;
+}
+
+export const findTransferType = (types: string[]) => types.find(isTransfer) || DEFAULT_TRANSFER_TYPE;
+
+export function guessAccountKind(accountName: string): AccountKind {
+  const name = normalizeText(accountName);
+  if (/efectivo|cash/.test(name)) return 'efectivo';
+  if (/\b(tc|tdc)\b|credito|visa|master|amex|cmr|lider|falabella|ripley|cencosud|paris/.test(name)) return 'credito';
   return 'debito';
 }
 
-/** Configuración de una cuenta: { kind, closeDay, dueDay }. */
-export const accountConfig = (config: Config, name: string): AccountConfig =>
-  config.accounts[name] || { kind: guessKind(name), closeDay: 0, dueDay: 0 };
+export const getAccountConfig = (config: Config, accountName: string): AccountConfig =>
+  config.accounts[accountName] || { kind: guessAccountKind(accountName), closeDay: 0, dueDay: 0 };
 
-export const creditCards = (data: Data) =>
-  data.accounts.filter((a) => accountConfig(data.config, a).kind === 'credito');
+export const listCreditCards = (data: SheetData) =>
+  data.accounts.filter((account) => getAccountConfig(data.config, account).kind === 'credito');
 
-export function defaultTransferDesc(config: Config, toAccount: string): string {
-  return accountConfig(config, toAccount).kind === 'credito' ? 'Pago ' + toAccount : 'Traspaso a ' + toAccount;
+export function defaultTransferDescription(config: Config, destinationAccount: string): string {
+  return getAccountConfig(config, destinationAccount).kind === 'credito'
+    ? 'Pago ' + destinationAccount
+    : 'Traspaso a ' + destinationAccount;
 }
 
-/**
- * Estadísticas de un mes (sin contar traspasos).
- * Los montos "netos" restan los reintegros a los gastos de la misma categoría/cuenta.
- */
-export function stats(monthKey: string, rows: Row[]): Stats {
-  const monthRows = rows.filter((r) => r.d.startsWith(monthKey) && !isTransfer(r.t));
-  const [y, m] = monthKey.split('-').map(Number);
-  const days = daysInMonth(y, m);
+/** Transfers are excluded. "Net" amounts subtract refunds from the expenses of the same category/account/day. */
+export function computeMonthStats(monthKey: string, transactions: Transaction[]): MonthStats {
+  const isCountedInMonth = (transaction: Transaction) =>
+    transaction.date.startsWith(monthKey) && !isTransfer(transaction.type);
+  const monthTransactions = transactions.filter(isCountedInMonth);
+  const [year, month] = monthKey.split('-').map(Number);
+  const totalDays = daysInMonth(year, month);
 
-  const daily: number[] = Array(days + 1).fill(0); // gasto neto de cada día (índice 1..days)
-  const byCat: Record<string, number> = {};
-  const byAcct: Record<string, number> = {};
-  let gasto = 0;
-  let ingreso = 0;
+  const dailyNet: number[] = Array(totalDays + 1).fill(0);
+  const netByCategory: Record<string, number> = {};
+  const netByAccount: Record<string, number> = {};
+  let expenses = 0;
+  let income = 0;
 
-  for (const r of monthRows) {
-    if (r.a < 0) gasto += -r.a;
-    else ingreso += r.a;
-    byCat[r.t] = (byCat[r.t] || 0) - r.a;
-    byAcct[r.c] = (byAcct[r.c] || 0) - r.a;
-    daily[+r.d.slice(8)] -= r.a;
+  for (const transaction of monthTransactions) {
+    if (transaction.amount < 0) expenses += -transaction.amount;
+    else income += transaction.amount;
+    netByCategory[transaction.type] = (netByCategory[transaction.type] || 0) - transaction.amount;
+    netByAccount[transaction.account] = (netByAccount[transaction.account] || 0) - transaction.amount;
+    dailyNet[dayOfMonth(transaction.date)] -= transaction.amount;
   }
 
-  return { gasto, ingreso, byCat, byAcct, daily, days, n: monthRows.length };
+  return {
+    expenses,
+    income,
+    netByCategory,
+    netByAccount,
+    dailyNet,
+    daysInMonth: totalDays,
+    transactionCount: monthTransactions.length
+  };
 }
 
-/** Último movimiento (no traspaso) con ese nombre, para autocompletar tipo, cuenta y descripción. */
-export function lastByName(data: Data, name: string) {
-  const target = norm(name);
+export function findLatestRowByName(data: SheetData, name: string): SheetRow | null {
+  const target = normalizeText(name);
   if (!target) return null;
-  let best: Data['rows'][number] | null = null;
-  for (const r of data.rows) {
-    if (norm(r[2]) === target && !isTransfer(r[5]) && (!best || r[1] >= best[1])) best = r;
+  let latest: SheetRow | null = null;
+  for (const row of data.rows) {
+    const [, date, rowName, , , type] = row;
+    if (normalizeText(rowName) === target && !isTransfer(type) && (!latest || date >= latest[1])) latest = row;
   }
-  return best;
+  return latest;
 }
 
-/** Los 300 nombres más usados, para el autocompletado. */
-export function frequentNames(data: Data): string[] {
-  const frequency: Record<string, number> = {};
-  for (const r of data.rows) {
-    if (r[2] && !isTransfer(r[5])) frequency[r[2]] = (frequency[r[2]] || 0) + 1;
+export function mostFrequentNames(data: SheetData): string[] {
+  const countByName: Record<string, number> = {};
+  for (const [, , name, , , type] of data.rows) {
+    if (name && !isTransfer(type)) countByName[name] = (countByName[name] || 0) + 1;
   }
-  return Object.keys(frequency)
-    .sort((a, b) => frequency[b] - frequency[a])
-    .slice(0, 300);
+  const byMostUsedFirst = (a: string, b: string) => countByName[b] - countByName[a];
+  return Object.keys(countByName).sort(byMostUsedFirst).slice(0, MAX_AUTOCOMPLETE_NAMES);
 }
 
-/* ---- Tarjetas de crédito ---- */
+/* ---- Credit cards ---- */
 
-/** Fecha de cierre de una tarjeta en el mes `monthKey` (ajustada si el mes es más corto que el día de cierre). */
-export function closeDateFor(config: Config, card: string, monthKey: string): string {
-  const [y, m] = monthKey.split('-').map(Number);
-  return `${monthKey}-${pad(Math.min(accountConfig(config, card).closeDay, daysInMonth(y, m)))}`;
-}
+export const statementCloseDate = (config: Config, card: string, monthKey: string) =>
+  isoDateInMonth(monthKey, getAccountConfig(config, card).closeDay);
 
-export interface Period {
+export interface BillingPeriod {
   start: string;
   end: string;
-  open: boolean;
+  isOpen: boolean;
 }
 
-/**
- * Período de facturación de una tarjeta. `offset` 0 = período abierto (aún sin cerrar),
- * 1 = último cerrado, 2 = el anterior, etc.
- */
-export function periodFor(config: Config, card: string, offset: number): Period {
-  const now = today();
-  const thisMonth = now.slice(0, 7);
+/** `periodsBack` 0 is the open period, 1 the last closed one, 2 the one before, and so on. */
+export function billingPeriod(config: Config, card: string, periodsBack: number): BillingPeriod {
+  const today = todayIso();
+  const thisMonth = today.slice(0, 7);
   const openPeriodEnd =
-    now <= closeDateFor(config, card, thisMonth)
-      ? closeDateFor(config, card, thisMonth)
-      : closeDateFor(config, card, monthShift(thisMonth, 1));
+    today <= statementCloseDate(config, card, thisMonth)
+      ? statementCloseDate(config, card, thisMonth)
+      : statementCloseDate(config, card, shiftMonth(thisMonth, 1));
 
-  const endMonth = monthShift(openPeriodEnd.slice(0, 7), -offset);
-  const end = closeDateFor(config, card, endMonth);
-  const start = addDays(closeDateFor(config, card, monthShift(endMonth, -1)), 1);
-  return { start, end, open: offset === 0 };
+  const endMonth = shiftMonth(openPeriodEnd.slice(0, 7), -periodsBack);
+  const end = statementCloseDate(config, card, endMonth);
+  const start = addDaysToDate(statementCloseDate(config, card, shiftMonth(endMonth, -1)), 1);
+  return { start, end, isOpen: periodsBack === 0 };
 }
 
-/** Movimientos de una tarjeta dentro de un período y sus totales. */
-export function periodTotals(rows: Row[], period: Period) {
-  const periodRows = rows
-    .filter((r) => r.d >= period.start && r.d <= period.end)
-    .sort((a, b) => (a.d < b.d ? -1 : a.d > b.d ? 1 : 0));
+export function billingPeriodTotals(cardTransactions: Transaction[], period: BillingPeriod) {
+  const isInPeriod = (transaction: Transaction) => transaction.date >= period.start && transaction.date <= period.end;
+  const periodTransactions = cardTransactions.filter(isInPeriod).sort(compareOldestFirst);
 
-  let compras = 0; // compras normales
-  let devol = 0; // devoluciones
-  let pagos = 0; // pagos recibidos desde otra cuenta (traspaso entrante)
-  let cargosTr = 0; // traspasos salientes cargados a la tarjeta (ej. avances)
-  for (const r of periodRows) {
-    if (isTransfer(r.t)) {
-      if (r.a > 0) pagos += r.a;
-      else cargosTr += -r.a;
-    } else if (r.a < 0) {
-      compras += -r.a;
+  let purchases = 0;
+  let refunds = 0;
+  let paymentsReceived = 0;
+  let transferCharges = 0; // outgoing transfers charged to the card, such as cash advances
+  for (const transaction of periodTransactions) {
+    if (isTransfer(transaction.type)) {
+      if (transaction.amount > 0) paymentsReceived += transaction.amount;
+      else transferCharges += -transaction.amount;
+    } else if (transaction.amount < 0) {
+      purchases += -transaction.amount;
     } else {
-      devol += r.a;
+      refunds += transaction.amount;
     }
   }
-  // Lo que el banco factura: el uso del período, sin descontar los pagos.
-  return { periodRows, compras, devol, pagos, cargosTr, facturado: compras + cargosTr - devol };
+  // The bank bills usage during the period; payments made do not reduce it.
+  const billed = purchases + transferCharges - refunds;
+  return { periodTransactions, purchases, refunds, paymentsReceived, transferCharges, billed };
 }

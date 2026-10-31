@@ -1,72 +1,83 @@
 <script lang="ts">
   import { app } from '../lib/app.svelte';
-  import { niceMax } from '../lib/charts';
-  import { money, monthLabel, monthShort, short } from '../lib/utils';
+  import { roundUpToNiceValue } from '../lib/charts';
+  import { formatCompactMoney, formatMoney, monthAndYear, shortMonthName } from '../lib/utils';
 
-  let { items, selectedKey }: { items: { key: string; v: number }[]; selectedKey: string } = $props();
+  let { months, selectedMonthKey }: { months: { monthKey: string; netSpending: number }[]; selectedMonthKey: string } =
+    $props();
 
-  const W = 340,
-    H = 160,
-    T = 20,
-    B = 22,
-    barWidth = 34;
+  const WIDTH = 340;
+  const HEIGHT = 160;
+  const PADDING_TOP = 20;
+  const PADDING_BOTTOM = 22;
+  const BAR_WIDTH = 34;
+  const MAX_CORNER_RADIUS = 4;
+  const LABEL_ROOM_BELOW_AXIS = 14;
 
-  const count = $derived(items.length);
-  const gap = $derived((W - count * barWidth) / (count + 1));
-  const geo = $derived.by(() => {
-    const maxPositive = Math.max(0, ...items.map((i) => i.v));
-    const maxNegative = Math.max(0, ...items.map((i) => -i.v));
-    const top = maxPositive > 0 ? niceMax(maxPositive) : 0;
-    const bottom = maxNegative > 0 ? niceMax(maxNegative) : 0;
-    const span = top + bottom || 1;
-    const plotHeight = H - T - B - (bottom > 0 ? 14 : 0);
-    return { zeroY: T + plotHeight * (top / span), scale: plotHeight / span };
+  const gap = $derived((WIDTH - months.length * BAR_WIDTH) / (months.length + 1));
+  const layout = $derived.by(() => {
+    const highest = Math.max(0, ...months.map((month) => month.netSpending));
+    const lowest = Math.max(0, ...months.map((month) => -month.netSpending));
+    const above = highest > 0 ? roundUpToNiceValue(highest) : 0;
+    const below = lowest > 0 ? roundUpToNiceValue(lowest) : 0;
+    const total = above + below || 1;
+    const plotHeight = HEIGHT - PADDING_TOP - PADDING_BOTTOM - (below > 0 ? LABEL_ROOM_BELOW_AXIS : 0);
+    return { zeroY: PADDING_TOP + plotHeight * (above / total), pixelsPerPeso: plotHeight / total };
   });
 
-  /** Barra con las esquinas de la punta redondeadas, hacia arriba (v > 0) o hacia abajo (v < 0). */
-  function barPath(x: number, height: number, up: boolean) {
-    const { zeroY } = geo;
-    const r = Math.min(4, height);
-    return up
-      ? `M${x} ${zeroY} V${zeroY - height + r} a${r} ${r} 0 0 1 ${r} -${r} h${barWidth - 2 * r} a${r} ${r} 0 0 1 ${r} ${r} V${zeroY} Z`
-      : `M${x} ${zeroY} V${zeroY + height - r} a${r} ${r} 0 0 0 ${r} ${r} h${barWidth - 2 * r} a${r} ${r} 0 0 0 ${r} -${r} V${zeroY} Z`;
+  /** Bar with rounded corners on its free end: growing up from the axis, or down when the month closed in credit. */
+  function barPath(x: number, height: number, growsUp: boolean) {
+    const radius = Math.min(MAX_CORNER_RADIUS, height);
+    const { zeroY } = layout;
+    return growsUp
+      ? `M${x} ${zeroY} V${zeroY - height + radius} a${radius} ${radius} 0 0 1 ${radius} -${radius} h${BAR_WIDTH - 2 * radius} a${radius} ${radius} 0 0 1 ${radius} ${radius} V${zeroY} Z`
+      : `M${x} ${zeroY} V${zeroY + height - radius} a${radius} ${radius} 0 0 0 ${radius} ${radius} h${BAR_WIDTH - 2 * radius} a${radius} ${radius} 0 0 0 ${radius} -${radius} V${zeroY} Z`;
   }
+
+  const selectMonth = (monthKey: string) => (app.month = monthKey);
 </script>
 
-<svg class="chart" viewBox="0 0 {W} {H}" role="img" aria-label="Gasto neto de los últimos {count} meses">
-  <line class="axis" x1="0" x2={W} y1={geo.zeroY} y2={geo.zeroY} stroke-width="1" />
-  {#each items as item, i (item.key)}
-    {@const x = gap + i * (barWidth + gap)}
-    {@const height = Math.abs(item.v) * geo.scale}
-    {@const selected = item.key === selectedKey}
-    {@const emphasis = selected ? 'fill:var(--ink);font-weight:700' : ''}
-    <!-- El rect transparente agranda el área de toque de cada barra. -->
+<svg
+  class="chart"
+  viewBox="0 0 {WIDTH} {HEIGHT}"
+  role="img"
+  aria-label="Gasto neto de los últimos {months.length} meses"
+>
+  <line class="axis" x1="0" x2={WIDTH} y1={layout.zeroY} y2={layout.zeroY} stroke-width="1" />
+  {#each months as month, index (month.monthKey)}
+    {@const x = gap + index * (BAR_WIDTH + gap)}
+    {@const barHeight = Math.abs(month.netSpending) * layout.pixelsPerPeso}
+    {@const isSelected = month.monthKey === selectedMonthKey}
+    {@const labelStyle = isSelected ? 'fill:var(--ink);font-weight:700' : ''}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <g
       style="cursor:pointer"
       role="button"
       tabindex="0"
-      aria-label={monthLabel(item.key)}
-      onclick={() => (app.month = item.key)}
-      onkeydown={(e) => e.key === 'Enter' && (app.month = item.key)}
+      aria-label={monthAndYear(month.monthKey)}
+      onclick={() => selectMonth(month.monthKey)}
+      onkeydown={(event) => event.key === 'Enter' && selectMonth(month.monthKey)}
     >
-      <rect x={x - 6} y="0" width={barWidth + 12} height={H} fill="transparent" />
-      {#if item.v > 0}
-        <path d={barPath(x, height, true)} fill={selected ? 'var(--accent)' : 'var(--accent-mid)'}
-          ><title>{monthLabel(item.key)}: {money(item.v)}</title></path
+      <!-- transparent rectangle that enlarges the touch area of each bar -->
+      <rect x={x - 6} y="0" width={BAR_WIDTH + 12} height={HEIGHT} fill="transparent" />
+      {#if month.netSpending > 0}
+        <path d={barPath(x, barHeight, true)} fill={isSelected ? 'var(--accent)' : 'var(--accent-mid)'}>
+          <title>{monthAndYear(month.monthKey)}: {formatMoney(month.netSpending)}</title>
+        </path>
+        <text x={x + BAR_WIDTH / 2} y={layout.zeroY - barHeight - 5} text-anchor="middle" style={labelStyle}
+          >{formatCompactMoney(month.netSpending)}</text
         >
-        <text x={x + barWidth / 2} y={geo.zeroY - height - 5} text-anchor="middle" style={emphasis}
-          >{short(item.v)}</text
-        >
-      {:else if item.v < 0}
-        <path d={barPath(x, height, false)} fill="var(--good)" fill-opacity={selected ? 1 : 0.55}
-          ><title>{monthLabel(item.key)}: {money(item.v)}</title></path
-        >
-        <text x={x + barWidth / 2} y={geo.zeroY + height + 12} text-anchor="middle" style={emphasis}
-          >{short(item.v)}</text
+      {:else if month.netSpending < 0}
+        <path d={barPath(x, barHeight, false)} fill="var(--good)" fill-opacity={isSelected ? 1 : 0.55}>
+          <title>{monthAndYear(month.monthKey)}: {formatMoney(month.netSpending)}</title>
+        </path>
+        <text x={x + BAR_WIDTH / 2} y={layout.zeroY + barHeight + 12} text-anchor="middle" style={labelStyle}
+          >{formatCompactMoney(month.netSpending)}</text
         >
       {/if}
-      <text x={x + barWidth / 2} y={H - 7} text-anchor="middle" style={emphasis}>{monthShort(item.key)}</text>
+      <text x={x + BAR_WIDTH / 2} y={HEIGHT - 7} text-anchor="middle" style={labelStyle}
+        >{shortMonthName(month.monthKey)}</text
+      >
     </g>
   {/each}
 </svg>

@@ -105,7 +105,7 @@ vite.config.ts              Vite, Svelte y manifest/service worker de la PWA
 public/                     íconos
 src/main.ts, App.svelte     arranque y componente raíz
 src/app.css                 estilos
-src/screens/                una pantalla por pestaña (Registrar, Movimientos, Resumen, Tarjetas, Ajustes)
+src/screens/                una pantalla por pestaña (Register, Transactions, Summary, Cards, Settings)
 src/components/             piezas reutilizables (formulario, hoja de edición, gráficos…)
 src/lib/app.svelte.ts       estado global, cola offline y sincronización
 src/lib/domain.ts           lógica pura: filas visibles, estadísticas, períodos de tarjeta (con pruebas)
@@ -113,4 +113,4 @@ src/lib/api.ts              cliente del Apps Script
 spreadsheet-code.gs         backend que se pega en la planilla
 ```
 
-Para agregar una pantalla: crea `src/screens/Nueva.svelte`, súmala a `screens` en `App.svelte`, a `TITLES` en `Header.svelte` y a `tabs` en `TabBar.svelte` (y al tipo `Tab` en `src/lib/types.ts`).
+Para agregar una pantalla: crea `src/screens/Nueva.svelte`, súmala a `SCREENS` en `App.svelte`, a `TAB_TITLES` en `Header.svelte` y a `TABS` en `TabBar.svelte` (y al tipo `Tab` en `src/lib/types.ts`).

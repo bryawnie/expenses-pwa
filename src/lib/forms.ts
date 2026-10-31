@@ -1,93 +1,95 @@
-/* Borradores del formulario de movimientos y su validación. */
-import { defaultTransferDesc, transferType } from './domain';
-import type { Config, Form, Item, Row } from './types';
-import { today, uid } from './utils';
+import { defaultTransferDescription, findTransferType } from './domain';
+import type { Config, Transaction, TransactionDraft, TransactionItem } from './types';
+import { generateId, todayIso } from './utils';
 
-export function newForm(lastAcct = ''): Form {
+export function emptyDraft(lastUsedAccount = ''): TransactionDraft {
   return {
-    kind: 'gasto',
-    amount: '',
+    kind: 'expense',
+    amountDigits: '',
     name: '',
-    desc: '',
-    date: today(),
+    description: '',
+    date: todayIso(),
     type: '',
-    acct: lastAcct,
-    to: '',
-    typeTouched: false,
-    acctTouched: !!lastAcct,
-    descTouched: false
+    account: lastUsedAccount,
+    destinationAccount: '',
+    hasChosenType: false,
+    hasChosenAccount: !!lastUsedAccount,
+    hasEditedDescription: false
   };
 }
 
-export function formFromRow(row: Row): Form {
+export function draftFromTransaction(transaction: Transaction): TransactionDraft {
   return {
-    kind: row.a < 0 ? 'gasto' : 'ingreso',
-    amount: String(Math.abs(Math.round(row.a))),
-    name: row.n,
-    desc: row.ds,
-    date: row.d,
-    type: row.t,
-    acct: row.c,
-    to: '',
-    typeTouched: true,
-    acctTouched: true,
-    descTouched: true
+    kind: transaction.amount < 0 ? 'expense' : 'income',
+    amountDigits: String(Math.abs(Math.round(transaction.amount))),
+    name: transaction.name,
+    description: transaction.description,
+    date: transaction.date,
+    type: transaction.type,
+    account: transaction.account,
+    destinationAccount: '',
+    hasChosenType: true,
+    hasChosenAccount: true,
+    hasEditedDescription: true
   };
 }
 
-export type Built<T> = { error: string } | { error?: undefined; value: T };
+export type ValidationResult<T> = { error: string } | { error?: undefined; value: T };
 
-/** Valida un alta y arma los ítems (un traspaso son dos: sale de una cuenta y entra en la otra). */
-export function buildNewItems(f: Form, types: string[], config: Config): Built<Item[]> {
-  const amount = +f.amount;
+/** A transfer becomes two items: money leaves one account and enters the other. */
+export function validateNewTransactions(
+  draft: TransactionDraft,
+  types: string[],
+  config: Config
+): ValidationResult<TransactionItem[]> {
+  const amount = +draft.amountDigits;
   if (!amount) return { error: 'Ingresa un monto.' };
-  const date = f.date || today();
+  const date = draft.date || todayIso();
 
-  if (f.kind === 'traspaso') {
-    if (!f.acct || !f.to) return { error: 'Elige la cuenta de origen y la de destino.' };
-    const desc = f.desc.trim() || defaultTransferDesc(config, f.to);
-    const type = transferType(types);
+  if (draft.kind === 'transfer') {
+    if (!draft.account || !draft.destinationAccount) return { error: 'Elige la cuenta de origen y la de destino.' };
+    const desc = draft.description.trim() || defaultTransferDescription(config, draft.destinationAccount);
+    const type = findTransferType(types);
     return {
       value: [
-        { id: uid(), date, name: 'Transferencia', desc, amount: -amount, type, account: f.acct },
-        { id: uid(), date, name: 'Transferencia', desc, amount, type, account: f.to }
+        { id: generateId(), date, name: 'Transferencia', desc, amount: -amount, type, account: draft.account },
+        { id: generateId(), date, name: 'Transferencia', desc, amount, type, account: draft.destinationAccount }
       ]
     };
   }
 
-  if (!f.name.trim()) return { error: 'Escribe el comercio o nombre.' };
-  if (!f.type) return { error: 'Elige un tipo.' };
-  if (!f.acct) return { error: 'Elige una cuenta.' };
+  if (!draft.name.trim()) return { error: 'Escribe el comercio o nombre.' };
+  if (!draft.type) return { error: 'Elige un tipo.' };
+  if (!draft.account) return { error: 'Elige una cuenta.' };
   return {
     value: [
       {
-        id: uid(),
+        id: generateId(),
         date,
-        name: f.name.trim(),
-        desc: f.desc.trim(),
-        amount: f.kind === 'gasto' ? -amount : amount,
-        type: f.type,
-        account: f.acct
+        name: draft.name.trim(),
+        desc: draft.description.trim(),
+        amount: draft.kind === 'expense' ? -amount : amount,
+        type: draft.type,
+        account: draft.account
       }
     ]
   };
 }
 
-/** Valida una edición y arma el ítem resultante. */
-export function buildEditItem(f: Form, id: string): Built<Item> {
-  const amount = +f.amount;
+export function validateEditedTransaction(draft: TransactionDraft, id: string): ValidationResult<TransactionItem> {
+  const amount = +draft.amountDigits;
   if (!amount) return { error: 'Ingresa un monto.' };
-  if (!f.name.trim() && !f.desc.trim()) return { error: 'Escribe un nombre.' };
-  if (!f.type || !f.acct) return { error: 'Elige tipo y cuenta.' };
+  if (!draft.name.trim() && !draft.description.trim()) return { error: 'Escribe un nombre.' };
+  if (!draft.type || !draft.account) return { error: 'Elige tipo y cuenta.' };
   return {
     value: {
       id,
-      date: f.date || today(),
-      name: f.name.trim(),
-      desc: f.desc.trim(),
-      amount: f.kind === 'gasto' ? -amount : amount,
-      type: f.type,
-      account: f.acct
+      date: draft.date || todayIso(),
+      name: draft.name.trim(),
+      desc: draft.description.trim(),
+      amount: draft.kind === 'expense' ? -amount : amount,
+      type: draft.type,
+      account: draft.account
     }
   };
 }

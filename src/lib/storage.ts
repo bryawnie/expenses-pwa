@@ -1,5 +1,4 @@
-/* Almacenamiento local (prefijo "gt." para conservar los datos de la versión anterior). */
-
+/** Keys keep the "gt." prefix so data saved by the previous version is still found. */
 export const storage = {
   get<T>(key: string, fallback: T): T {
     try {
@@ -13,14 +12,14 @@ export const storage = {
     try {
       localStorage.setItem('gt.' + key, JSON.stringify(value));
     } catch {
-      /* cuota llena */
+      // storage full: the copy in memory keeps working
     }
   },
   remove(key: string) {
     try {
       localStorage.removeItem('gt.' + key);
     } catch {
-      /* sin acceso */
+      // storage unavailable
     }
   }
 };

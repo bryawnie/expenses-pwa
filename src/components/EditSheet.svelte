@@ -1,44 +1,54 @@
 <script lang="ts">
   import { app } from '../lib/app.svelte';
-  import { originalOf } from '../lib/domain';
-  import { buildEditItem, formFromRow } from '../lib/forms';
-  import type { Row } from '../lib/types';
-  import MovementForm from './MovementForm.svelte';
+  import { toOriginalRowPayload } from '../lib/domain';
+  import { draftFromTransaction, validateEditedTransaction } from '../lib/forms';
+  import type { Transaction } from '../lib/types';
+  import TransactionForm from './TransactionForm.svelte';
 
-  let { row, onclose }: { row: Row; onclose: () => void } = $props();
+  let { transaction, onClose }: { transaction: Transaction; onClose: () => void } = $props();
   // svelte-ignore state_referenced_locally
-  let form = $state(formFromRow(row)); // copia editable: la hoja se monta una vez por fila
+  let draft = $state(draftFromTransaction(transaction)); // the sheet is mounted once per transaction
 
-  function submit(): string {
-    const built = buildEditItem(form, row.id || '');
-    if (built.error !== undefined) return built.error;
+  function saveChanges(): string {
+    const validation = validateEditedTransaction(draft, transaction.id || '');
+    if (validation.error !== undefined) return validation.error;
 
-    if (row.pending) {
-      // Aún no llegó a la planilla: basta con corregir el alta en la cola.
-      app.replacePendingItem(built.value);
+    if (transaction.isPending) {
+      app.replaceQueuedItem(validation.value);
     } else {
-      app.enqueue({ action: 'update', payload: { row: row.r, orig: originalOf(row), item: built.value } });
+      app.enqueueOperation({
+        action: 'update',
+        payload: { row: transaction.sheetRow, orig: toOriginalRowPayload(transaction), item: validation.value }
+      });
     }
-    app.toast('Cambios guardados ✓');
-    onclose();
+    app.showToast('Cambios guardados ✓');
+    onClose();
     return '';
   }
 
-  function remove() {
+  function deleteTransaction() {
     if (!confirm('¿Eliminar este movimiento de tu planilla?')) return;
-    if (row.pending) app.removePendingItem(row.id || '');
-    else app.enqueue({ action: 'delete', payload: { row: row.r, orig: originalOf(row) } });
-    app.toast('Eliminado');
-    onclose();
+    if (transaction.isPending) {
+      app.removeQueuedItem(transaction.id || '');
+    } else {
+      app.enqueueOperation({
+        action: 'delete',
+        payload: { row: transaction.sheetRow, orig: toOriginalRowPayload(transaction) }
+      });
+    }
+    app.showToast('Eliminado');
+    onClose();
   }
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && onclose()} />
+<svelte:window onkeydown={(event) => event.key === 'Escape' && onClose()} />
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-<div id="overlay" class="on" onclick={(e) => e.target === e.currentTarget && onclose()}>
+<div id="overlay" class="on" onclick={(event) => event.target === event.currentTarget && onClose()}>
   <div id="sheet" role="dialog" aria-modal="true">
     <div class="grab"></div>
-    <div id="sheetBody"><MovementForm bind:form mode="edit" onsubmit={submit} ondelete={remove} /></div>
+    <div id="sheetBody">
+      <TransactionForm bind:draft mode="edit" onSubmit={saveChanges} onDelete={deleteTransaction} />
+    </div>
   </div>
 </div>

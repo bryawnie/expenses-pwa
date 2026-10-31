@@ -1,48 +1,47 @@
 <script lang="ts">
   import { app } from './lib/app.svelte';
-  import { frequentNames } from './lib/domain';
+  import { mostFrequentNames } from './lib/domain';
   import Header from './components/Header.svelte';
   import TabBar from './components/TabBar.svelte';
   import Toast from './components/Toast.svelte';
-  import Registrar from './screens/Registrar.svelte';
-  import Movimientos from './screens/Movimientos.svelte';
-  import Resumen from './screens/Resumen.svelte';
-  import Tarjetas from './screens/Tarjetas.svelte';
-  import Ajustes from './screens/Ajustes.svelte';
+  import Register from './screens/Register.svelte';
+  import Transactions from './screens/Transactions.svelte';
+  import Summary from './screens/Summary.svelte';
+  import Cards from './screens/Cards.svelte';
+  import Settings from './screens/Settings.svelte';
 
-  const screens = {
-    registrar: Registrar,
-    movimientos: Movimientos,
-    resumen: Resumen,
-    tarjetas: Tarjetas,
-    ajustes: Ajustes
+  const SCREENS = {
+    register: Register,
+    transactions: Transactions,
+    summary: Summary,
+    cards: Cards,
+    settings: Settings
   };
-  const Screen = $derived(screens[app.tab]);
-  const names = $derived(frequentNames(app.data));
+  const REFRESH_AFTER_HIDDEN_MS = 30000;
 
-  // Persistencia y arranque
-  $effect(() => app.persist());
-  app.importHash();
-  void app.sync();
+  const Screen = $derived(SCREENS[app.tab]);
+  const autocompleteNames = $derived(mostFrequentNames(app.data));
+
+  $effect(() => app.persistOnChange());
+  app.importConnectionFromHash();
+  void app.synchronize();
 
   $effect(() => {
-    const onOnline = () => {
-      app.status = 'ok';
-      void app.sync();
+    const handleOnline = () => {
+      app.syncStatus = 'ok';
+      void app.synchronize();
     };
-    const onOffline = () => {
-      app.status = 'offline';
+    const handleOffline = () => (app.syncStatus = 'offline');
+    const handleVisibilityChange = () => {
+      if (!document.hidden && Date.now() - app.lastSyncedAt > REFRESH_AFTER_HIDDEN_MS) void app.synchronize();
     };
-    const onVisible = () => {
-      if (!document.hidden && Date.now() - app.lastSync > 30000) void app.sync();
-    };
-    window.addEventListener('online', onOnline);
-    window.addEventListener('offline', onOffline);
-    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
-      window.removeEventListener('online', onOnline);
-      window.removeEventListener('offline', onOffline);
-      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   });
 </script>
@@ -50,7 +49,7 @@
 <Header />
 <main id="view"><Screen /></main>
 <datalist id="names">
-  {#each names as n (n)}<option value={n}></option>{/each}
+  {#each autocompleteNames as name (name)}<option value={name}></option>{/each}
 </datalist>
 <TabBar />
 <Toast />
