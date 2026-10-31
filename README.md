@@ -14,14 +14,14 @@ PWA (este repo)  ──POST JSON + token──▶  Apps Script (spreadsheet-code
 
 El script detecta solo la hoja de gastos: busca, en las primeras 10 filas de cada hoja, una fila de encabezados. Si hay varias hojas parecidas se queda con la que tiene más filas (o fija el nombre en `SHEET_NAME`, ver más abajo).
 
-| Columna | Encabezados aceptados | ¿Obligatoria? | Contenido |
-| --- | --- | --- | --- |
-| Fecha | `Date`, `Fecha` | **Sí** | Fecha del movimiento |
-| Monto | `Amount`, `Monto`, `Importe`, `Valor` | **Sí** | Número. **Negativo = gasto, positivo = ingreso/reintegro** |
-| Nombre | `Name`, `Nombre`, `Comercio`, `Glosa` | No | Comercio o nombre |
-| Descripción | `Description`, `Descripción`, `Detalle` | No | Detalle libre |
-| Tipo | `Type`, `Tipo`, `Categoría`, `Category` | No* | Categoría del movimiento |
-| Cuenta | `Account`, `Cuenta`, `Banco`, `Medio de pago` | No* | Cuenta o tarjeta usada |
+| Columna     | Encabezados aceptados                         | ¿Obligatoria? | Contenido                                                  |
+| ----------- | --------------------------------------------- | ------------- | ---------------------------------------------------------- |
+| Fecha       | `Date`, `Fecha`                               | **Sí**        | Fecha del movimiento                                       |
+| Monto       | `Amount`, `Monto`, `Importe`, `Valor`         | **Sí**        | Número. **Negativo = gasto, positivo = ingreso/reintegro** |
+| Nombre      | `Name`, `Nombre`, `Comercio`, `Glosa`         | No            | Comercio o nombre                                          |
+| Descripción | `Description`, `Descripción`, `Detalle`       | No            | Detalle libre                                              |
+| Tipo        | `Type`, `Tipo`, `Categoría`, `Category`       | No*           | Categoría del movimiento                                   |
+| Cuenta      | `Account`, `Cuenta`, `Banco`, `Medio de pago` | No*           | Cuenta o tarjeta usada                                     |
 
 \* Sin estas columnas la app no tiene categorías ni cuentas que ofrecer, así que en la práctica las necesitas.
 
@@ -73,13 +73,21 @@ El script ignora estas dos hojas al buscar la hoja de gastos.
 
 ### App (PWA)
 
-Sirve esta carpeta como sitio estático (la PWA requiere HTTPS, salvo en `localhost`). Todas las rutas son relativas, así que funciona tanto en la raíz de un dominio como en un subdirectorio.
+La app está hecha con **Svelte 5 + TypeScript + Vite**. Requiere Node 22 o superior.
+
+```bash
+npm install
+npm run dev      # servidor de desarrollo
+npm test         # pruebas de la lógica (vitest)
+npm run build    # revisa tipos y genera dist/
+```
+
+La PWA requiere HTTPS, salvo en `localhost`. Todas las rutas son relativas, así que funciona tanto en la raíz de un dominio como en un subdirectorio. El service worker (modo sin conexión) se genera solo en el build y se actualiza automáticamente; ya no hay que subir ningún número de caché a mano.
 
 **Despliegue en GitHub Pages**
 
-1. En el repositorio: **Settings → Pages → Build and deployment**, *Source*: **Deploy from a branch**, rama `main`, carpeta `/ (root)`. (Pages requiere que el repo sea público, salvo en planes de pago.)
-2. Tras el primer despliegue, la app queda en `https://www.bry.cl/expenses-app-v2/` (GitHub usa el dominio `www.bry.cl` configurado en tu sitio personal `bryawnie.github.io`). Abre siempre esa dirección con `https://`: la PWA solo se instala con HTTPS.
-3. Cada `git push` a `main` la actualiza. Si cambias archivos de `js/` o `css/`, sube también el número de `CACHE` en `sw.js` para que el teléfono descargue la versión nueva.
+1. En el repositorio: **Settings → Pages → Build and deployment**, _Source_: **GitHub Actions**. (Pages requiere que el repo sea público, salvo en planes de pago.)
+2. Cada `git push` a `main` ejecuta `.github/workflows/deploy.yml`, que corre las pruebas, compila y publica `dist/`. La app queda en `https://www.bry.cl/expenses-app-v2/` (GitHub usa el dominio `www.bry.cl` configurado en tu sitio personal `bryawnie.github.io`). Abre siempre esa dirección con `https://`: la PWA solo se instala con HTTPS.
 
 Luego, en la app, abre **Ajustes → Conexión con tu planilla**, pega la URL y el token y toca **Guardar y probar conexión**.
 
@@ -92,13 +100,17 @@ Abre la app en el navegador y usa **Agregar a pantalla de inicio / Instalar app*
 ## Estructura del proyecto
 
 ```
-index.html              estructura de la app
-css/styles.css          estilos
-js/                     código, un archivo por área (utils, state, api, data, ui, form, pantallas, main)
-sw.js                   service worker (caché para uso sin conexión)
-manifest.webmanifest    datos de instalación de la PWA
-icon-*.png              íconos
-spreadsheet-code.gs     backend que se pega en la planilla
+index.html                  punto de entrada de Vite
+vite.config.ts              Vite, Svelte y manifest/service worker de la PWA
+public/                     íconos
+src/main.ts, App.svelte     arranque y componente raíz
+src/app.css                 estilos
+src/screens/                una pantalla por pestaña (Registrar, Movimientos, Resumen, Tarjetas, Ajustes)
+src/components/             piezas reutilizables (formulario, hoja de edición, gráficos…)
+src/lib/app.svelte.ts       estado global, cola offline y sincronización
+src/lib/domain.ts           lógica pura: filas visibles, estadísticas, períodos de tarjeta (con pruebas)
+src/lib/api.ts              cliente del Apps Script
+spreadsheet-code.gs         backend que se pega en la planilla
 ```
 
-Si agregas o renombras archivos de `js/` o `css/`, actualiza también la lista `SHELL` de `sw.js` y sube el número de `CACHE`, para que los dispositivos descarguen los cambios.
+Para agregar una pantalla: crea `src/screens/Nueva.svelte`, súmala a `screens` en `App.svelte`, a `TITLES` en `Header.svelte` y a `tabs` en `TabBar.svelte` (y al tipo `Tab` en `src/lib/types.ts`).
