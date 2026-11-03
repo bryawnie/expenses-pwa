@@ -87,7 +87,7 @@ La PWA requiere HTTPS, salvo en `localhost`. Todas las rutas son relativas, así
 **Despliegue en GitHub Pages**
 
 1. En el repositorio: **Settings → Pages → Build and deployment**, _Source_: **GitHub Actions**. (Pages requiere que el repo sea público, salvo en planes de pago.)
-2. Cada `git push` a `main` ejecuta `.github/workflows/deploy.yml`, que corre las pruebas, compila y publica `dist/`. La app queda en `https://www.bry.cl/expenses-app-v2/` (GitHub usa el dominio `www.bry.cl` configurado en tu sitio personal `bryawnie.github.io`). Abre siempre esa dirección con `https://`: la PWA solo se instala con HTTPS.
+2. Cada `git push` a `main` ejecuta `.github/workflows/deploy.yml`, que corre las pruebas, compila y publica `dist/`. La app queda en `https://www.bry.cl/expenses-pwa/` (GitHub usa el dominio `www.bry.cl` configurado en tu sitio personal `bryawnie.github.io`). Abre siempre esa dirección con `https://`: la PWA solo se instala con HTTPS.
 
 Luego, en la app, abre **Ajustes → Conexión con tu planilla**, pega la URL y el token y toca **Guardar y probar conexión**.
 
