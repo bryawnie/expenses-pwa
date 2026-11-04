@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   billingPeriodTotals,
+  cardBalance,
   buildVisibleTransactions,
   computeMonthStats,
   emptySheetData,
@@ -64,7 +65,45 @@ describe('helpers', () => {
     expect(guessAccountKind('Cuenta RUT')).toBe('debito');
   });
 
-  it('does not subtract payments received from what the card billed', () => {
+  describe('card balance', () => {
+    const card = (date: string, amount: number, type = 'Comida'): Transaction => ({
+      sheetRow: null,
+      date,
+      name: '',
+      description: '',
+      amount,
+      type,
+      account: 'TC'
+    });
+    const transactions = [
+      card('2026-09-10', -20000),
+      card('2026-09-20', 5000, 'Traspasos Internos'),
+      card('2026-10-02', -10000),
+      card('2026-10-03', 4000, 'Traspasos Internos'),
+      card('2026-10-04', 1000),
+      card('2026-11-05', 3000, 'Traspasos Internos'),
+      card('2026-11-06', -2000)
+    ];
+    const period = { start: '2026-10-01', end: '2026-10-31', isOpen: false };
+
+    it('sums purchases minus refunds and payments up to a date', () => {
+      expect(cardBalance(transactions, '2026-09-30')).toBe(15000);
+      expect(cardBalance(transactions)).toBe(19000);
+    });
+
+    it('lets payments made before the closing reduce the balance at close', () => {
+      const totals = billingPeriodTotals(transactions, period);
+      expect(totals).toMatchObject({ billed: 9000, balanceBefore: 15000, balanceAtClose: 20000 });
+    });
+
+    it('subtracts partial payments made after the closing from what is still pending', () => {
+      const totals = billingPeriodTotals(transactions, period);
+      expect(totals.paymentsAfterClose).toBe(3000);
+      expect(totals.pendingAfterPayments).toBe(17000);
+    });
+  });
+
+  it('does not count payments as billed usage', () => {
     const transactions: Transaction[] = [
       { sheetRow: 1, date: '2026-10-02', name: 'A', description: '', amount: -10000, type: 'Comida', account: 'TC' },
       {

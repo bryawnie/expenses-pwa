@@ -239,7 +239,32 @@ export function billingPeriodTotals(cardTransactions: Transaction[], period: Bil
       refunds += transaction.amount;
     }
   }
-  // The bank bills usage during the period; payments made do not reduce it.
   const billed = purchases + transferCharges - refunds;
-  return { periodTransactions, purchases, refunds, paymentsReceived, transferCharges, billed };
+
+  const balanceBefore = cardBalance(cardTransactions, addDaysToDate(period.start, -1));
+  const balanceAtClose = cardBalance(cardTransactions, period.end);
+  const isPaymentAfterClose = (transaction: Transaction) =>
+    transaction.date > period.end && isTransfer(transaction.type) && transaction.amount > 0;
+  const paymentsAfterClose = cardTransactions
+    .filter(isPaymentAfterClose)
+    .reduce((sum, transaction) => sum + transaction.amount, 0);
+
+  return {
+    periodTransactions,
+    purchases,
+    refunds,
+    paymentsReceived,
+    transferCharges,
+    billed,
+    balanceBefore,
+    balanceAtClose,
+    paymentsAfterClose,
+    pendingAfterPayments: balanceAtClose - paymentsAfterClose
+  };
+}
+
+/** Amount owed on the card up to `untilDate` (inclusive): purchases minus refunds and payments. Negative means a credit balance. */
+export function cardBalance(cardTransactions: Transaction[], untilDate?: string): number {
+  const isIncluded = (transaction: Transaction) => untilDate === undefined || transaction.date <= untilDate;
+  return -cardTransactions.filter(isIncluded).reduce((sum, transaction) => sum + transaction.amount, 0);
 }
