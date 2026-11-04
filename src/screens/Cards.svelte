@@ -6,7 +6,6 @@
     billingPeriodTotals,
     buildVisibleTransactions,
     getAccountConfig,
-    isTransfer,
     listCreditCards
   } from '../lib/domain';
   import {
@@ -35,7 +34,9 @@
   const statementKey = $derived(`${cardName}|${period.end}`);
   const statementTotal = $derived(app.data.config.statements[statementKey]);
   const hasStatementTotal = $derived(typeof statementTotal === 'number' && statementTotal !== 0);
-  const difference = $derived(hasStatementTotal ? statementTotal - totals.billed : 0);
+  const difference = $derived(hasStatementTotal ? Math.round(statementTotal - totals.balanceAtClose) : 0);
+  const periodNetMovement = $derived(totals.balanceAtClose - totals.balanceBefore);
+  const showsPendingPayment = $derived(!period.isOpen && app.selectedCard.periodOffset === 1);
 
   // The due date falls in the closing month if its day comes after the closing day, otherwise in the next month.
   const dueDate = $derived.by(() => {
@@ -51,13 +52,11 @@
   const signatures = $derived(totals.periodTransactions.map(chargeSignature));
 
   const isChecked = (_transaction: Transaction, index: number) => !!checkedBySignature[signatures[index]];
-  const isPaymentReceived = (transaction: Transaction) => isTransfer(transaction.type) && transaction.amount >= 0;
-  const amountAddedToBill = (transaction: Transaction) => (isPaymentReceived(transaction) ? 0 : -transaction.amount);
   const markedTotal = $derived(
-    totals.periodTransactions.filter(isChecked).reduce((sum, transaction) => sum + amountAddedToBill(transaction), 0)
+    totals.periodTransactions.filter(isChecked).reduce((sum, transaction) => sum - transaction.amount, 0)
   );
   const exampleStatementTotal = $derived(
-    pesoNumberFormat.format(Math.round(totals.billed / EXAMPLE_ROUNDING) * EXAMPLE_ROUNDING || EXAMPLE_FALLBACK)
+    pesoNumberFormat.format(Math.round(totals.balanceAtClose / EXAMPLE_ROUNDING) * EXAMPLE_ROUNDING || EXAMPLE_FALLBACK)
   );
 
   function toggleCharge(signature: string) {
@@ -130,15 +129,16 @@
         >
       </div>
       <div class="muted small" style="margin-top:10px">
-        {period.isOpen ? 'Uso desde el último cierre' : 'Facturado en este cierre'}
+        {period.isOpen ? 'Saldo a la fecha' : 'Saldo al cierre'}
       </div>
-      <div class="hero">{formatMoney(totals.billed)}</div>
+      <div class="hero">{formatMoney(totals.balanceAtClose)}</div>
       <div class="muted small">
         {period.isOpen
-          ? `Compras y cargos desde el cierre del ${dayAndMonth(addDaysToDate(period.start, -1))}, sin descontar tus pagos`
-          : 'Compras y cargos del período, sin descontar tus pagos'}
+          ? 'Compras y cargos menos devoluciones y pagos hechos hasta hoy'
+          : 'Lo que debías al cierre, descontando los pagos hechos antes de esa fecha'}
       </div>
       <div style="margin-top:12px">
+        <div class="line2"><span>Saldo anterior</span><b>{formatMoney(totals.balanceBefore)}</b></div>
         <div class="line2">
           <span>Compras y cargos</span><b>{formatMoney(totals.purchases + totals.transferCharges)}</b>
         </div>
@@ -146,8 +146,16 @@
             <span>Devoluciones</span><b>{formatMoney(-totals.refunds)}</b>
           </div>{/if}
         {#if totals.paymentsReceived}<div class="line2">
-            <span class="muted">Pagos abonados (no se restan)</span><b>{formatMoney(totals.paymentsReceived)}</b>
+            <span>Pagos del período</span><b>{formatMoney(-totals.paymentsReceived)}</b>
           </div>{/if}
+        {#if showsPendingPayment}
+          <div class="line2">
+            <span>Pagos después del cierre</span><b>{formatMoney(-totals.paymentsAfterClose)}</b>
+          </div>
+          <div class="line2">
+            <span>Falta pagar de este estado</span><b>{formatMoney(totals.pendingAfterPayments)}</b>
+          </div>
+        {/if}
         {#if dueDate}<div class="line2">
             <span class="muted">Vence</span><b>{dayAndMonth(dueDate)}</b>
           </div>{/if}
@@ -187,7 +195,7 @@
       {:else}
         <div class="muted small" style="margin-bottom:4px">
           Marca cada cargo que veas en tu estado de cuenta. Marcado: <b>{formatMoney(markedTotal)}</b>
-          · Sin marcar: <b>{formatMoney(totals.billed - markedTotal)}</b>
+          · Sin marcar: <b>{formatMoney(periodNetMovement - markedTotal)}</b>
         </div>
         {#each totals.periodTransactions as transaction, index (signatures[index])}
           <button
