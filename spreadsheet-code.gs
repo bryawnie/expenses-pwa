@@ -67,30 +67,21 @@ function handle(req) {
     case 'bootstrap':
       return snapshot(getContext(), req.since);
     case 'add':
-      return locked(() => {
-        const ctx = getContext();
-        const results = addItems(ctx, req.items || []);
-        const snap = snapshot(ctx, req.since);
-        snap.results = results;
-        return snap;
-      });
+      return locked(() => ({ ok: true, results: addItems(getContext(), req.items || []) }));
     case 'update':
       return locked(() => {
-        const ctx = getContext();
-        updateItem(ctx, req);
-        return snapshot(ctx, req.since);
+        updateItem(getContext(), req);
+        return { ok: true };
       });
     case 'delete':
       return locked(() => {
-        const ctx = getContext();
-        deleteItem(ctx, req);
-        return snapshot(ctx, req.since);
+        deleteItem(getContext(), req);
+        return { ok: true };
       });
     case 'saveConfig':
       return locked(() => {
-        const ctx = getContext();
-        writeConfig(ctx.ss, req.config);
-        return snapshot(ctx, req.since);
+        writeConfig(getContext().ss, req.config);
+        return { ok: true };
       });
     default:
       throw new HttpError('bad_request', 'Acción desconocida: ' + req.action);
@@ -493,12 +484,20 @@ function sameRow(a, b) {
   );
 }
 
+function rowAt(ctx, r) {
+  if (!(r > ctx.headerRow) || r > ctx.sheet.getLastRow()) return null;
+  const v = ctx.sheet.getRange(r, 1, 1, ctx.lastCol).getValues()[0];
+  const c = ctx.col;
+  const d = toDateStr(cell(v, c.date), ctx.tz);
+  if (!d) return null;
+  return [r, d, str(cell(v, c.name)), str(cell(v, c.desc)), toNum(cell(v, c.amount)), str(cell(v, c.type)), str(cell(v, c.account))];
+}
+
 function locateRow(ctx, hint, orig) {
   if (!orig) throw new HttpError('bad_request', 'Falta la fila original');
+  const hinted = rowAt(ctx, Number(hint));
+  if (hinted && sameRow(hinted, orig)) return hinted;
   const rows = readRows(ctx);
-  for (let i = 0; i < rows.length; i++) {
-    if (rows[i][0] === Number(hint) && sameRow(rows[i], orig)) return rows[i];
-  }
   for (let i = 0; i < rows.length; i++) {
     if (sameRow(rows[i], orig)) return rows[i];
   }

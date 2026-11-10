@@ -135,13 +135,8 @@ class App {
       while (this.queue.length) {
         const operation = this.queue[0];
         try {
-          const snapshot = await callApi(
-            $state.snapshot(this.settings),
-            operation.action,
-            $state.snapshot(operation.payload)
-          );
+          await callApi($state.snapshot(this.settings), operation.action, $state.snapshot(operation.payload));
           this.queue.shift();
-          this.applySnapshot(snapshot);
         } catch (error) {
           // Rejected operations are dropped; network and auth errors abort and are retried later.
           const isRejection = error instanceof ApiError && (error.code === 'conflict' || error.code === 'bad_request');
